@@ -1,0 +1,66 @@
+# Environment
+.env
+.env.local
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# Node / Angular
+node_modules/
+.angular/
+dist/
+.npm/
+*.log
+npm-debug.log*
+
+# Tauri
+desktop/angular-app/src-tauri/target/
+desktop/angular-app/src-tauri/gen/
+
+# Workspace runtime data
+workspace/originals/*
+!workspace/originals/.gitkeep
+workspace/projects/*
+!workspace/projects/.gitkeep
+workspace/temporary/*
+!workspace/temporary/.gitkeep
+workspace/exports/*
+!workspace/exports/.gitkeep
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Models (downloaded locally)
+backend/models/*
+!backend/models/.gitkeep
+*.pt
+*.bin
+*.onnx
+*.gguf
+
+# Coverage / test artifacts (tests intentionally not part of this project)
+.coverage
+htmlcov/
