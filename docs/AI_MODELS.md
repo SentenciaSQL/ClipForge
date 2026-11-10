@@ -9,10 +9,15 @@ All models run locally. No paid cloud API keys are required.
 | `large-v3` | ~3–5 GB | Default quality target |
 | `distil-large-v3` | lower | Faster alternative |
 | `medium` | ~1.5–3 GB | Balanced |
-| `small` | ~1 GB | Low-resource fallback |
+| `small` | ~1 GB | Low-resource / CPU-friendly |
+| `tiny` / `base` | minimal | Smoke tests and weak CPUs |
 
 Device selection: `auto` → CUDA if available, else CPU.  
-Compute type: `auto` (float16 on GPU, int8/float32 on CPU as appropriate).
+Compute type: `auto` (`float16` on GPU, `int8` on CPU).
+
+Audio is extracted with FFmpeg to 16 kHz mono WAV, then loaded with `soundfile` into float32 PCM before Whisper (avoids PyAV version drift).  
+VAD uses Faster-Whisper’s built-in Silero VAD filter (`vad_filter=True`).  
+Transcription JSON caches live under `workspace/temporary/{video_id}/transcription_cache/`.
 
 ## Semantic analysis — Ollama
 

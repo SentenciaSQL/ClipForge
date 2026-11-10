@@ -113,7 +113,7 @@ import {
         </nav>
 
         <div class="mt-4 rounded-xl border border-line bg-canvas/60 p-3 text-xs text-muted">
-          Phase 1 foundation active. Transcription and AI clipping unlock in later phases.
+          Phase 2 active: local Faster-Whisper transcription. Highlight detection comes in Phase 3.
         </div>
       </aside>
 
