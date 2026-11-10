@@ -26,10 +26,34 @@ dist/
 .npm/
 *.log
 npm-debug.log*
+yarn-error.log
+pnpm-debug.log*
 
-# Tauri
+# Desktop (Angular / Tauri) — heavy local artifacts
+desktop/**/node_modules/
+desktop/**/dist/
+desktop/**/.angular/
+desktop/**/out-tsc/
+desktop/**/tmp/
+desktop/**/coverage/
 desktop/angular-app/src-tauri/target/
 desktop/angular-app/src-tauri/gen/
+desktop/angular-app/src-tauri/WixTools/
+desktop/angular-app/src-tauri/sidecars/*
+!desktop/angular-app/src-tauri/sidecars/.gitkeep
+desktop/**/*.exe
+desktop/**/*.msi
+desktop/**/*.nsis.zip
+desktop/**/*.dmg
+desktop/**/*.AppImage
+desktop/**/*.app/
+desktop/**/*.deb
+desktop/**/*.rpm
+# PyInstaller / sidecar build leftovers under desktop or backend
+desktop/**/build/
+*.spec
+backend/dist/
+backend/build/
 
 # Workspace runtime data
 workspace/originals/*
