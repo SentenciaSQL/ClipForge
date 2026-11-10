@@ -1,0 +1,16 @@
+{
+  "name": "Music Bed",
+  "slug": "music_bed",
+  "enable_loudnorm": true,
+  "enable_limiter": true,
+  "integrated_lufs": -14.0,
+  "true_peak": -1.5,
+  "music_volume": 0.55,
+  "original_volume": 0.85,
+  "voiceover_volume": 1.0,
+  "ducking_enabled": true,
+  "ducking_threshold": 0.06,
+  "ducking_ratio": 4.0,
+  "ducking_attack_ms": 25.0,
+  "ducking_release_ms": 220.0
+}

@@ -171,3 +171,51 @@ export interface Clip {
   created_at: string;
   updated_at: string;
 }
+
+export interface AudioTrack {
+  id: string;
+  clip_id: string;
+  track_type: string;
+  label: string;
+  source_path: string | null;
+  volume: number;
+  muted: boolean;
+  start_seconds: number;
+  end_seconds: number | null;
+  offset_seconds: number;
+  fade_in_seconds: number;
+  fade_out_seconds: number;
+  loop: boolean;
+  ducking_enabled: boolean;
+  metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface AudioMixSettings {
+  enable_loudnorm: boolean;
+  enable_limiter: boolean;
+  integrated_lufs: number;
+  true_peak: number;
+  lra: number;
+  ducking_threshold: number;
+  ducking_ratio: number;
+  ducking_attack_ms: number;
+  ducking_release_ms: number;
+  preset_slug?: string | null;
+}
+
+export interface AudioStudioState {
+  clip_id: string;
+  duration_seconds: number;
+  tracks: AudioTrack[];
+  mix_settings: AudioMixSettings;
+  audio_presets: Array<{ id: string; name: string; slug?: string; config: Record<string, unknown> }>;
+}
+
+export interface SubtitlePreset {
+  id: string;
+  name: string;
+  slug: string;
+  config: Record<string, unknown>;
+  is_builtin: boolean;
+}

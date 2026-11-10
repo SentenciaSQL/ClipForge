@@ -1,4 +1,4 @@
-"""FFmpeg clip renderer: trim, reframe, burn-in ASS, encode."""
+"""FFmpeg clip renderer: trim, reframe, burn-in ASS, mix audio, encode."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.core.hardware import detect_hardware
 from app.core.logging import get_logger
+from app.media.audio.audio_mixer import MixPlan
 from app.media.ffmpeg import get_ffmpeg, run_command
 from app.media.reframe import ReframePlan
 
@@ -22,6 +23,7 @@ class RenderResult:
     encoder: str
     reframe_mode: str
     command: list[str]
+    mix_applied: bool = False
 
 
 def _escape_subtitles_path(path: Path) -> str:
@@ -53,6 +55,7 @@ def render_clip(
     ass_path: Path | None = None,
     fps: int | None = None,
     burn_subtitles: bool = True,
+    mix_plan: MixPlan | None = None,
 ) -> RenderResult:
     settings = get_settings()
     ffmpeg = get_ffmpeg()
@@ -60,9 +63,9 @@ def render_clip(
 
     encoder_name, encoder_args = choose_video_encoder()
     target_fps = fps or settings.output_fps
+    uses_complex_video = "[" in reframe.filter_chain or ";" in reframe.filter_chain
+    apply_mix = mix_plan is not None and bool(mix_plan.filter_complex)
 
-    # When reframe uses filtergraph with labels (blurred_bg), use -filter_complex.
-    uses_complex = "[" in reframe.filter_chain or ";" in reframe.filter_chain
     args = [
         ffmpeg,
         "-y",
@@ -74,16 +77,38 @@ def render_clip(
         f"{duration_seconds:.3f}",
     ]
 
-    if uses_complex:
-        filter_complex = reframe.filter_chain
-        if burn_subtitles and ass_path and ass_path.exists():
-            escaped = _escape_subtitles_path(ass_path)
-            filter_complex = f"{filter_complex}[vtmp];[vtmp]subtitles='{escaped}'[vout]"
-            mapped_video = "[vout]"
+    if apply_mix:
+        for extra in mix_plan.input_files:
+            args += ["-i", str(extra)]
+
+    if uses_complex_video or apply_mix:
+        # Always unify into a single filter_complex when mixing audio or using labeled video graphs.
+        if uses_complex_video:
+            video_graph = reframe.filter_chain
+            if burn_subtitles and ass_path and ass_path.exists():
+                escaped = _escape_subtitles_path(ass_path)
+                video_graph = f"{video_graph}[vtmp];[vtmp]subtitles='{escaped}'[vout]"
+            else:
+                video_graph = f"{video_graph}[vout]"
         else:
-            filter_complex = f"{filter_complex}[vout]"
-            mapped_video = "[vout]"
-        args += ["-filter_complex", filter_complex, "-map", mapped_video, "-map", "0:a?"]
+            video_filter = reframe.filter_chain
+            if burn_subtitles and ass_path and ass_path.exists():
+                escaped = _escape_subtitles_path(ass_path)
+                video_filter = f"{video_filter},subtitles='{escaped}'"
+            video_graph = f"[0:v]{video_filter}[vout]"
+
+        if apply_mix:
+            filter_complex = f"{video_graph};{mix_plan.filter_complex}"
+            args += [
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                "[vout]",
+                "-map",
+                mix_plan.output_map,
+            ]
+        else:
+            args += ["-filter_complex", video_graph, "-map", "[vout]", "-map", "0:a?"]
     else:
         video_filter = reframe.filter_chain
         if burn_subtitles and ass_path and ass_path.exists():
@@ -101,15 +126,17 @@ def render_clip(
         "aac",
         "-b:a",
         "192k",
+        "-shortest",
         "-movflags",
         "+faststart",
         str(output_path),
     ]
 
     logger.info(
-        "Rendering clip encoder=%s mode=%s out=%s cmd=%s",
+        "Rendering clip encoder=%s mode=%s mix=%s out=%s cmd=%s",
         encoder_name,
         reframe.mode,
+        apply_mix,
         output_path,
         " ".join(shlex.quote(part) for part in args),
     )
@@ -120,4 +147,5 @@ def render_clip(
         encoder=encoder_name,
         reframe_mode=reframe.mode,
         command=args,
+        mix_applied=apply_mix,
     )

@@ -139,9 +139,19 @@ Body: `{ "clip_ids": ["..."], "render_if_needed": true }`
 
 ### `DELETE /api/clips/{id}`
 
+### Audio Studio
+
+- `GET /api/clips/{id}/audio` — tracks + mix settings + presets
+- `PUT /api/clips/{id}/audio/mix-settings`
+- `POST /api/clips/{id}/audio/apply-preset`
+- `GET|POST /api/clips/{id}/audio-tracks` (multipart upload for music/voice)
+- `PATCH|DELETE /api/audio-tracks/{id}`
+- `GET /api/audio-presets`
+
 ## Planned (later phases)
 
-- Audio Studio:
+- Packaging / optimization endpoints as needed
+- Audio Studio leftovers:
   - `POST /api/clips/{id}/audio/import`
   - `GET /api/clips/{id}/audio`
   - `PATCH /api/clips/{id}/audio`
