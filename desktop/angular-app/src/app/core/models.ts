@@ -99,3 +99,37 @@ export interface AppSettings {
   clip_max_seconds: number;
   hardware: Record<string, unknown>;
 }
+
+export interface TranscriptionWord {
+  word: string;
+  start: number;
+  end: number;
+  confidence: number | null;
+  index?: number;
+}
+
+export interface TranscriptionSegment {
+  id: number;
+  start: number;
+  end: number;
+  text: string;
+  avg_logprob: number | null;
+  no_speech_prob: number | null;
+  words: TranscriptionWord[];
+}
+
+export interface Transcription {
+  id: string;
+  video_id: string;
+  language: string | null;
+  language_probability: number | null;
+  model_name: string;
+  full_text: string | null;
+  audio_path: string | null;
+  duration_seconds: number | null;
+  created_at: string;
+  segment_count: number;
+  word_count: number;
+  segments?: TranscriptionSegment[] | null;
+  words?: TranscriptionWord[] | null;
+}

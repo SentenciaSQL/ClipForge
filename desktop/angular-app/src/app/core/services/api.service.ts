@@ -8,6 +8,7 @@ import {
   ProcessingJob,
   Project,
   SourceVideo,
+  Transcription,
   VideoImportResponse,
   VideoMetadata,
 } from '../models';
@@ -68,12 +69,29 @@ export class ApiService {
     return this.http.post<ProcessingJob>(`${this.baseUrl}/videos/${videoId}/analyze`, body);
   }
 
+  transcribeVideo(
+    videoId: string,
+    body: { language?: string | null; whisper_model?: string | null; force?: boolean } = {}
+  ): Observable<ProcessingJob> {
+    return this.http.post<ProcessingJob>(`${this.baseUrl}/videos/${videoId}/transcribe`, body);
+  }
+
+  getVideoTranscription(videoId: string, includeDetails = true): Observable<Transcription> {
+    return this.http.get<Transcription>(
+      `${this.baseUrl}/videos/${videoId}/transcription?include_details=${includeDetails}`
+    );
+  }
+
   listJobs(): Observable<ProcessingJob[]> {
     return this.http.get<ProcessingJob[]>(`${this.baseUrl}/jobs`);
   }
 
   getJob(id: string): Observable<ProcessingJob> {
     return this.http.get<ProcessingJob>(`${this.baseUrl}/jobs/${id}`);
+  }
+
+  cancelJob(id: string): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.baseUrl}/jobs/${id}/cancel`, {});
   }
 
   getSettings(): Observable<AppSettings> {

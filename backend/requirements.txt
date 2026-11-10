@@ -17,6 +17,10 @@ orjson==3.10.12
 # Phase 2+ (installed, imported lazily so Phase 1 runs without GPU models)
 faster-whisper==1.1.0
 opencv-python-headless==4.10.0.84
-numpy==2.1.3
+numpy>=2.1.3,<3
 scenedetect[opencv]==0.6.4
 soundfile==0.12.1
+requests>=2.32.0
+# Pin av below 14 if you rely on faster-whisper's path-based decode;
+# this project feeds float32 PCM via soundfile to avoid av API drift.
+requests>=2.32.0

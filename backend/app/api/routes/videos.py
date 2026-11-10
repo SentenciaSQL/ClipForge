@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.database.models import ProcessingJob
+from app.orchestrator.job_manager import job_manager
 from app.schemas.common import MessageResponse
 from app.schemas.jobs import ProcessingJobOut
 from app.schemas.videos import AnalyzeRequest, SourceVideoOut, VideoImportResponse, VideoMetadataOut
@@ -108,9 +109,8 @@ def analyze_video(
     db: Session = Depends(get_db),
 ) -> ProcessingJobOut:
     """
-    Phase 1: create a queued analysis job record.
-
-    Full pipeline execution (transcription → highlights → render) lands in Phase 2+.
+    Queue analysis. Phase 2 runs audio extraction + Faster-Whisper transcription.
+    Later stages are marked deferred until Phase 3+.
     """
     video = get_video(db, video_id)
     if not video:
@@ -118,6 +118,7 @@ def analyze_video(
     if not get_project(db, video.project_id):
         raise HTTPException(status_code=404, detail="Project not found")
 
+    settings = payload.model_dump()
     job = ProcessingJob(
         project_id=video.project_id,
         video_id=video.id,
@@ -125,10 +126,7 @@ def analyze_video(
         status="queued",
         current_stage="queued",
         progress=0.0,
-        message=(
-            "Analysis job queued. Transcription and highlight detection "
-            "will run once Phase 2+ workers are enabled."
-        ),
+        message="Queued for audio extraction and local transcription",
         stages_json=[
             {"stage": "import", "status": "completed"},
             {"stage": "metadata", "status": "completed"},
@@ -141,11 +139,12 @@ def analyze_video(
             {"stage": "rendering", "status": "pending"},
             {"stage": "export", "status": "pending"},
         ],
-        result_json={"settings": payload.model_dump()},
+        result_json={"settings": settings},
         started_at=None,
         created_at=datetime.now(timezone.utc),
     )
     db.add(job)
     db.commit()
     db.refresh(job)
+    job_manager.submit_analyze(job.id)
     return ProcessingJobOut.model_validate(job)

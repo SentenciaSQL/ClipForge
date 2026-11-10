@@ -14,6 +14,7 @@ from app.core.config import get_settings
 from app.core.hardware import detect_hardware
 from app.core.logging import configure_logging, get_logger
 from app.database.session import SessionLocal, init_db
+from app.orchestrator.job_manager import job_manager
 from app.services.seed import seed_subtitle_presets
 
 logger = get_logger(__name__)
@@ -42,6 +43,8 @@ async def lifespan(_app: FastAPI):
     for note in hardware.notes:
         logger.warning("Hardware note: %s", note)
     yield
+    job_manager.shutdown(wait=False)
+    logger.info("Backend shutdown complete")
 
 
 def create_app() -> FastAPI:

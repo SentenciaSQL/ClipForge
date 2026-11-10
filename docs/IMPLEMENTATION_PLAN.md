@@ -5,7 +5,7 @@
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 1 Foundation | Repo, backend, Angular/Tauri, SQLite, import + metadata | **Complete** |
-| 2 Transcription | Audio extract, Faster-Whisper, word timestamps | Pending approval |
+| 2 Transcription | Audio extract, Faster-Whisper, word timestamps | **Complete** |
 | 3 Highlights | Ollama Qwen3, chunking, scoring, 12–30s clips | Pending |
 | 4 Video processing | Clip, ASS subs, reframe, FFmpeg render, batch export | Pending |
 | 5 Desktop UI polish | Full screens wired to live endpoints | Partial in Phase 1 |
@@ -35,23 +35,33 @@ Executed successfully:
 - `GET /api/dashboard` + `GET /api/settings`
 - `ng build` (Angular 19 development configuration) succeeded
 
-## Phase 2 next (awaiting approval)
+## Phase 2 deliverables
 
-1. Extract 16 kHz mono WAV via FFmpeg
-2. Run Faster-Whisper (`large-v3` default) with language detection
-3. Persist `Transcription` + `TranscriptionWord`
-4. Cache transcriptions by video hash/model
-5. Wire job manager stage updates over WebSocket
+- FFmpeg 16 kHz mono WAV extraction with reuse when source unchanged
+- Faster-Whisper integration (`large-v3` default; tiny/base/small/medium/distil supported)
+- Auto language detection + word/segment timestamps + confidence
+- JSON file cache + SQLite `Transcription` / `TranscriptionWord` persistence
+- Background `JobManager` thread pool + GPU lock around Whisper
+- `POST /api/videos/{id}/analyze` and `/transcribe` execute real Phase 2 stages
+- Job cancellation endpoint
+- Angular Import + Generate screens poll live job progress and show transcript
+
+## Phase 3 next (awaiting approval)
+
+1. Ollama Qwen3 chunked semantic analysis
+2. Candidate generation 12–30s with boundary validation
+3. Weighted scoring + overlap dedupe
+4. Persist highlights / selected clips
 
 ## Blockers observed in this cloud agent environment
 
-- No NVIDIA GPU / CUDA (`nvidia-smi` missing) — CPU path used
-- Ollama not installed — not required for Phase 1
+- No NVIDIA GPU / CUDA (`nvidia-smi` missing) — CPU path used; verification uses `small`/`tiny`
+- Ollama not installed — required for Phase 3
 - Angular CLI not global — use `npx @angular/cli@19`
 - Target OS is Windows 11; this agent runs Linux — scripts are PowerShell for Windows, backend verified on Linux
 
 ## Compatibility notes
 
-- Pin Python **3.12** for Faster-Whisper / PyTorch stack
+- Pin Python **3.12** for Faster-Whisper / CTranslate2 stack
 - Prefer `qwen3:8b` via Ollama when available; document fallbacks in `AI_MODELS.md`
 - Pyannote may require a Hugging Face token for model download — optional, never mandatory for core clip flow
