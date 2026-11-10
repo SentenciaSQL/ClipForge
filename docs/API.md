@@ -64,13 +64,36 @@ Copies the file into `workspace/originals/{project_id}/` and extracts FFprobe me
 
 ### `POST /api/videos/{id}/analyze`
 
-Creates a queued `ProcessingJob` with pipeline stage placeholders. Stage execution starts in Phase 2+.
+Queues a background job. **Phase 2** executes:
+
+1. audio extraction
+2. Faster-Whisper transcription
+
+Later stages are marked `deferred` until Phase 3+.
+
+Body fields include `language`, `whisper_model`, `force`, clip settings.
+
+### `POST /api/videos/{id}/transcribe`
+
+Same Phase 2 worker path focused on transcription settings (`language`, `whisper_model`, `force`).
+
+### `GET /api/videos/{id}/transcription?include_details=true`
+
+Latest transcription with segments and word-level timestamps.
+
+### `GET /api/transcriptions/{id}`
+
+Fetch a transcription by id.
 
 ## Jobs
 
 ### `GET /api/jobs`
 
 ### `GET /api/jobs/{id}`
+
+### `POST /api/jobs/{id}/cancel`
+
+Requests cancellation. Queued jobs stop immediately; running jobs stop between stages.
 
 ## Settings
 
