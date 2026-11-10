@@ -4,12 +4,16 @@ import { Observable } from 'rxjs';
 
 import {
   AppSettings,
+  AudioMixSettings,
+  AudioStudioState,
+  AudioTrack,
   Clip,
   DashboardStats,
   Highlight,
   ProcessingJob,
   Project,
   SourceVideo,
+  SubtitlePreset,
   Transcription,
   VideoImportResponse,
   VideoMetadata,
@@ -114,6 +118,50 @@ export class ApiService {
 
   deleteClip(clipId: string): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(`${this.baseUrl}/clips/${clipId}`);
+  }
+
+  getAudioStudio(clipId: string): Observable<AudioStudioState> {
+    return this.http.get<AudioStudioState>(`${this.baseUrl}/clips/${clipId}/audio`);
+  }
+
+  updateMixSettings(clipId: string, settings: AudioMixSettings): Observable<AudioMixSettings> {
+    return this.http.put<AudioMixSettings>(`${this.baseUrl}/clips/${clipId}/audio/mix-settings`, settings);
+  }
+
+  applyAudioPreset(clipId: string, presetSlug: string): Observable<AudioStudioState> {
+    return this.http.post<AudioStudioState>(`${this.baseUrl}/clips/${clipId}/audio/apply-preset`, {
+      preset_slug: presetSlug,
+    });
+  }
+
+  updateAudioTrack(
+    trackId: string,
+    patch: Partial<AudioTrack>
+  ): Observable<AudioTrack> {
+    return this.http.patch<AudioTrack>(`${this.baseUrl}/audio-tracks/${trackId}`, patch);
+  }
+
+  deleteAudioTrack(trackId: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.baseUrl}/audio-tracks/${trackId}`);
+  }
+
+  uploadAudioTrack(
+    clipId: string,
+    trackType: string,
+    file: File,
+    options: { label?: string; volume?: number; ducking_enabled?: boolean } = {}
+  ): Observable<AudioTrack> {
+    const form = new FormData();
+    form.append('track_type', trackType);
+    form.append('file', file);
+    if (options.label) form.append('label', options.label);
+    if (options.volume != null) form.append('volume', String(options.volume));
+    if (options.ducking_enabled != null) form.append('ducking_enabled', String(options.ducking_enabled));
+    return this.http.post<AudioTrack>(`${this.baseUrl}/clips/${clipId}/audio-tracks`, form);
+  }
+
+  listSubtitlePresets(): Observable<SubtitlePreset[]> {
+    return this.http.get<SubtitlePreset[]>(`${this.baseUrl}/subtitle-presets`);
   }
 
   listJobs(): Observable<ProcessingJob[]> {

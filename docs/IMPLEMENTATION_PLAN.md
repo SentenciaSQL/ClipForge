@@ -8,9 +8,8 @@
 | 2 Transcription | Audio extract, Faster-Whisper, word timestamps | **Complete** |
 | 3 Highlights | Ollama Qwen3, chunking, scoring, 12–30s clips | **Complete** |
 | 4 Video processing | Clip, ASS subs, reframe, FFmpeg render, batch export | **Complete** |
-| 5 Desktop UI polish | Full screens wired to live endpoints | Partial in Phase 1 |
-| 6 Optimization | GPU mgr, cache, cancel/recovery, packaging | Pending |
-| Audio Studio | Tracks, mix, ducking, Audio Studio UI | Foundation modules in Phase 1 |
+| 5 Desktop UI + Audio Studio | Tracks, mix/ducking/loudnorm, UI polish | **Complete** |
+| 6 Optimization | GPU mgr, cache, cancel/recovery, packaging | Packaging notes started |
 
 ## Phase 1 deliverables
 
@@ -66,11 +65,21 @@ Executed successfully:
 - `POST /api/clips/{id}/render`, `PATCH /api/clips/{id}`, `POST /api/clips/export`
 - Clips Studio render controls + Export Library batch export UI
 
-## Phase 5 / Audio Studio next (awaiting approval)
+## Phase 5 deliverables
 
-1. Full Audio Studio timeline UI + track APIs
-2. Ducking/loudnorm applied during final render
-3. Broader desktop polish / packaging
+- Audio track CRUD + file upload APIs per clip
+- Mix settings (loudnorm / limiter / ducking params) persisted on `clip.audio_config`
+- Built-in audio presets (`balanced`, `speech_focus`, `music_bed`)
+- Sidechain ducking + loudnorm/limiter wired into FFmpeg render filtergraph
+- Angular Audio Studio (tracks, volumes, mute, ducking, presets, render)
+- Subtitle Editor loads live presets from API
+- Packaging notes in `docs/PACKAGING.md`
+
+## Phase 6 next (awaiting approval)
+
+1. Stronger GPU memory manager / model unload
+2. Broader cache invalidation + crash recovery
+3. Tauri sidecar packaging + Windows installer polish
 
 ## Blockers observed in this cloud agent environment
 

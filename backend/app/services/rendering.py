@@ -16,6 +16,7 @@ from app.database.models import Clip, SourceVideo, SubtitlePreset, Transcription
 from app.media.reframe import plan_reframe_for_clip
 from app.media.renderer import render_clip
 from app.media.subtitles.ass_generator import build_ass_for_clip, write_ass_file
+from app.services.audio_studio import build_mix_plan_for_clip, ensure_original_track, get_mix_settings
 from app.services.transcriptions import get_latest_transcription
 from app.storage.paths import video_temp_dir
 
@@ -118,6 +119,10 @@ def render_clip_asset(
     export_dir.mkdir(parents=True, exist_ok=True)
     output_path = export_dir / safe_name
 
+    ensure_original_track(db, clip)
+    mix_plan = build_mix_plan_for_clip(db, clip)
+    mix_settings = get_mix_settings(clip)
+
     result = render_clip(
         source_path=source,
         output_path=output_path,
@@ -126,6 +131,7 @@ def render_clip_asset(
         reframe=reframe,
         ass_path=ass_path if burn_subtitles else None,
         burn_subtitles=burn_subtitles,
+        mix_plan=mix_plan,
     )
 
     clip.output_path = str(result.output_path)
@@ -142,6 +148,10 @@ def render_clip_asset(
         "subtitle_preset": preset.get("slug") or preset.get("name"),
         "output_width": settings.output_width,
         "output_height": settings.output_height,
+        "audio_mix": True,
+        "loudnorm": mix_settings.enable_loudnorm,
+        "limiter": mix_settings.enable_limiter,
+        "audio_preset": mix_settings.preset_slug,
     }
     db.commit()
     db.refresh(clip)

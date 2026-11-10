@@ -15,6 +15,7 @@ from app.core.hardware import detect_hardware
 from app.core.logging import configure_logging, get_logger
 from app.database.session import SessionLocal, init_db
 from app.orchestrator.job_manager import job_manager
+from app.services.audio_studio import seed_audio_presets
 from app.services.seed import seed_subtitle_presets
 
 logger = get_logger(__name__)
@@ -29,6 +30,7 @@ async def lifespan(_app: FastAPI):
     db = SessionLocal()
     try:
         seed_subtitle_presets(db)
+        seed_audio_presets(db)
     finally:
         db.close()
     hardware = detect_hardware()
