@@ -98,6 +98,24 @@ export class ApiService {
     return this.http.get<Clip[]>(`${this.baseUrl}/projects/${projectId}/clips`);
   }
 
+  renderClip(
+    clipId: string,
+    body: { reframing_mode?: string; subtitle_preset?: string; burn_subtitles?: boolean } = {}
+  ): Observable<ProcessingJob> {
+    return this.http.post<ProcessingJob>(`${this.baseUrl}/clips/${clipId}/render`, body);
+  }
+
+  exportClips(clipIds: string[]): Observable<ProcessingJob> {
+    return this.http.post<ProcessingJob>(`${this.baseUrl}/clips/export`, {
+      clip_ids: clipIds,
+      render_if_needed: true,
+    });
+  }
+
+  deleteClip(clipId: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.baseUrl}/clips/${clipId}`);
+  }
+
   listJobs(): Observable<ProcessingJob[]> {
     return this.http.get<ProcessingJob[]>(`${this.baseUrl}/jobs`);
   }

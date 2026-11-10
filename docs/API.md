@@ -121,11 +121,26 @@ Re-queue semantic analysis using an existing transcription.
 
 ### `GET /api/projects/{id}/clips`
 
+### `GET /api/clips/{id}`
+
+### `PATCH /api/clips/{id}`
+
+Adjust title, start/end (12–30s), reframing mode, subtitle preset.
+
+### `POST /api/clips/{id}/render`
+
+Queue FFmpeg render (ASS burn-in + vertical reframe + encode).
+
+### `POST /api/clips/export`
+
+Body: `{ "clip_ids": ["..."], "render_if_needed": true }`
+
+### `GET /api/subtitle-presets`
+
+### `DELETE /api/clips/{id}`
+
 ## Planned (later phases)
 
-- `POST /api/clips/{id}/render`
-- `PATCH /api/clips/{id}`
-- `POST /api/clips/export`
 - Audio Studio:
   - `POST /api/clips/{id}/audio/import`
   - `GET /api/clips/{id}/audio`

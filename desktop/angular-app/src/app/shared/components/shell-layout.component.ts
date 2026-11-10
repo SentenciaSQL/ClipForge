@@ -113,7 +113,7 @@ import {
         </nav>
 
         <div class="mt-4 rounded-xl border border-line bg-canvas/60 p-3 text-xs text-muted">
-          Phase 3 active: local Ollama highlight detection and 12–30s clip scoring.
+          Phase 4 active: ASS subtitles, smart reframing, and local FFmpeg render/export.
         </div>
       </aside>
 
