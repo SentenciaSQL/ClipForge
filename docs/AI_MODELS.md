@@ -33,6 +33,9 @@ ollama pull qwen3:8b
 
 If `qwen3:8b` is unavailable in your Ollama registry, use the closest available Qwen3 8B tag and set `AVC_OLLAMA_MODEL` accordingly. Document the exact tag in Settings.
 
+Phase 3 sends overlapping transcript windows (about 90s with 20s overlap) to `/api/chat` with `format=json`.  
+Responses are validated with Pydantic (`HighlightProposalBatch`). LLM timestamps are never trusted blindly — they are snapped onto real Whisper segment boundaries and filtered to 12–30 seconds before scoring.
+
 ## Speaker diarization — optional
 
 Pyannote Audio when installed and authorized. The core pipeline must succeed without it.

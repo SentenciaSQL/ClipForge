@@ -8,8 +8,8 @@
 | 2 | Metadata extraction | 1 | FFprobe |
 | 3 | Audio extraction | 2 ✅ | FFmpeg → 16 kHz mono WAV |
 | 4 | Transcription | 2 ✅ | Faster-Whisper (+ cache) |
-| 5 | Semantic analysis | 3 | Ollama Qwen3 |
-| 6 | Highlight selection | 3 | Scoring + dedupe |
+| 5 | Semantic analysis | 3 ✅ | Ollama Qwen3 (chunked JSON) |
+| 6 | Highlight selection | 3 ✅ | Snap + score + dedupe |
 | 7 | Visual analysis | 4 | OpenCV / scene detect |
 | 8 | Subtitle generation | 4 | ASS from word timestamps |
 | 9 | Rendering | 4 | FFmpeg (+ NVENC when available) |

@@ -3,7 +3,7 @@ import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription, switchMap, timer } from 'rxjs';
 
-import { ProcessingJob, SourceVideo, Transcription } from '../../core/models';
+import { Clip, ProcessingJob, SourceVideo, Transcription } from '../../core/models';
 import { ApiService } from '../../core/services/api.service';
 
 @Component({
@@ -16,8 +16,8 @@ import { ApiService } from '../../core/services/api.service';
         <div class="avc-label">Pipeline</div>
         <h1 class="avc-title mt-1">Clip Generation</h1>
         <p class="mt-2 max-w-2xl text-sm text-muted">
-          Phase 2 runs local audio extraction and Faster-Whisper transcription with live job progress.
-          Highlight detection starts in Phase 3.
+          Runs local audio extraction, Faster-Whisper transcription, and Ollama semantic highlight
+          detection with live job progress.
         </p>
       </header>
 
@@ -87,7 +87,7 @@ import { ApiService } from '../../core/services/api.service';
         </label>
         <div class="md:col-span-2 flex flex-wrap gap-3">
           <button class="avc-btn-primary" type="submit" [disabled]="!selectedVideoId || busy()">
-            Run transcription
+            Run full analysis
           </button>
           <button class="avc-btn-ghost" type="button" *ngIf="job()" (click)="cancel()" [disabled]="!busy()">
             Cancel
@@ -117,6 +117,22 @@ import { ApiService } from '../../core/services/api.service';
         </p>
         <p class="mt-3 whitespace-pre-wrap text-sm">{{ tx.full_text }}</p>
       </section>
+
+      <section class="avc-panel p-5" *ngIf="clips().length">
+        <div class="avc-label">Selected clips</div>
+        <div class="mt-4 space-y-3">
+          <article class="rounded-xl border border-line bg-canvas/50 p-3" *ngFor="let clip of clips()">
+            <div class="flex justify-between gap-3">
+              <strong>{{ clip.hook }}</strong>
+              <span class="text-accent">{{ clip.score | number: '1.0-0' }}</span>
+            </div>
+            <div class="text-xs text-muted mt-1">
+              {{ clip.start_seconds | number: '1.1-1' }}s–{{ clip.end_seconds | number: '1.1-1' }}s
+            </div>
+            <p class="text-sm mt-2">{{ clip.transcript }}</p>
+          </article>
+        </div>
+      </section>
     </div>
   `,
 })
@@ -127,6 +143,7 @@ export class ClipGenerationComponent implements OnInit, OnDestroy {
   readonly videos = signal<SourceVideo[]>([]);
   readonly job = signal<ProcessingJob | null>(null);
   readonly transcription = signal<Transcription | null>(null);
+  readonly clips = signal<Clip[]>([]);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -157,6 +174,7 @@ export class ClipGenerationComponent implements OnInit, OnDestroy {
     this.busy.set(true);
     this.error.set(null);
     this.transcription.set(null);
+    this.clips.set([]);
     this.api
       .analyzeVideo(this.selectedVideoId, {
         language: this.language === 'auto' ? null : this.language,
@@ -183,6 +201,9 @@ export class ClipGenerationComponent implements OnInit, OnDestroy {
                   if (updated.status === 'completed') {
                     this.api.getVideoTranscription(this.selectedVideoId).subscribe({
                       next: (tx) => this.transcription.set(tx),
+                    });
+                    this.api.getVideoClips(this.selectedVideoId).subscribe({
+                      next: (clips) => this.clips.set(clips),
                     });
                   }
                   if (updated.status === 'failed') {

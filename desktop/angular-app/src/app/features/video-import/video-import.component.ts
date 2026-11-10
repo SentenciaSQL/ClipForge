@@ -3,7 +3,7 @@ import { Component, OnDestroy, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription, switchMap, timer } from 'rxjs';
 
-import { ProcessingJob, Project, SourceVideo, Transcription, VideoImportResponse } from '../../core/models';
+import { Clip, ProcessingJob, Project, SourceVideo, Transcription, VideoImportResponse } from '../../core/models';
 import { ApiService } from '../../core/services/api.service';
 
 @Component({
@@ -101,7 +101,7 @@ import { ApiService } from '../../core/services/api.service';
         </dl>
         <div class="mt-5 flex flex-wrap gap-3">
           <button type="button" class="avc-btn-primary" (click)="queueAnalyze(r.video.id)" [disabled]="busy()">
-            Transcribe (Phase 2)
+            Analyze & find clips
           </button>
           <button
             type="button"
@@ -146,6 +146,23 @@ import { ApiService } from '../../core/services/api.service';
           </div>
         </div>
       </section>
+
+      <section class="avc-panel p-5" *ngIf="clips().length">
+        <div class="avc-label">Selected clips</div>
+        <div class="mt-4 space-y-3">
+          <article class="rounded-xl border border-line bg-canvas/40 p-3" *ngFor="let clip of clips()">
+            <div class="flex items-center justify-between gap-3">
+              <div class="font-medium">{{ clip.hook }}</div>
+              <div class="text-accent font-display text-lg">{{ clip.score | number: '1.0-0' }}</div>
+            </div>
+            <div class="mt-1 text-xs text-muted">
+              {{ clip.start_seconds | number: '1.1-1' }}s–{{ clip.end_seconds | number: '1.1-1' }}s ·
+              {{ clip.category }}
+            </div>
+            <p class="mt-2 text-sm">{{ clip.transcript }}</p>
+          </article>
+        </div>
+      </section>
     </div>
   `,
 })
@@ -161,6 +178,7 @@ export class VideoImportComponent implements OnDestroy {
   readonly error = signal<string | null>(null);
   readonly activeJob = signal<ProcessingJob | null>(null);
   readonly transcription = signal<Transcription | null>(null);
+  readonly clips = signal<Clip[]>([]);
 
   projectName = '';
   selectedProjectId = '';
@@ -205,6 +223,7 @@ export class VideoImportComponent implements OnDestroy {
     this.busyMessage.set('Importing and extracting metadata…');
     this.error.set(null);
     this.transcription.set(null);
+    this.clips.set([]);
     this.activeJob.set(null);
     this.api
       .importVideo(
@@ -227,9 +246,10 @@ export class VideoImportComponent implements OnDestroy {
 
   queueAnalyze(videoId: string): void {
     this.busy.set(true);
-    this.busyMessage.set('Queueing transcription job…');
+    this.busyMessage.set('Queueing analysis job…');
     this.error.set(null);
     this.transcription.set(null);
+    this.clips.set([]);
     this.api
       .analyzeVideo(videoId, {
         whisper_model: this.whisperModel,
@@ -239,7 +259,7 @@ export class VideoImportComponent implements OnDestroy {
       .subscribe({
         next: (job) => {
           this.activeJob.set(job);
-          this.busyMessage.set('Transcribing locally with Faster-Whisper…');
+          this.busyMessage.set('Running local transcription + Ollama highlight detection…');
           this.startPolling(job.id, videoId);
         },
         error: (err) => {
@@ -274,6 +294,10 @@ export class VideoImportComponent implements OnDestroy {
             if (job.status === 'completed') {
               this.api.getVideoTranscription(videoId).subscribe({
                 next: (tx) => this.transcription.set(tx),
+                error: () => undefined,
+              });
+              this.api.getVideoClips(videoId).subscribe({
+                next: (clips) => this.clips.set(clips),
                 error: () => undefined,
               });
             }

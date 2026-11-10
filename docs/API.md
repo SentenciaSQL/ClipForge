@@ -64,14 +64,16 @@ Copies the file into `workspace/originals/{project_id}/` and extracts FFprobe me
 
 ### `POST /api/videos/{id}/analyze`
 
-Queues a background job. **Phase 2** executes:
+Queues a background job. **Phase 3** executes:
 
 1. audio extraction
 2. Faster-Whisper transcription
+3. Ollama semantic analysis (chunked)
+4. highlight selection / scoring / dedupe
 
-Later stages are marked `deferred` until Phase 3+.
+Later stages are marked `deferred` until Phase 4+.
 
-Body fields include `language`, `whisper_model`, `force`, clip settings.
+Body fields include `language`, `whisper_model`, `ollama_model`, `force`, clip settings.
 
 ### `POST /api/videos/{id}/transcribe`
 
@@ -109,9 +111,18 @@ Persists overrides in SQLite `app_settings` (key `runtime`).
 
 Sends periodic `jobs_snapshot` messages with recent job progress.
 
+### `GET /api/videos/{id}/highlights?selected_only=false`
+
+### `POST /api/videos/{id}/highlights`
+
+Re-queue semantic analysis using an existing transcription.
+
+### `GET /api/videos/{id}/clips`
+
+### `GET /api/projects/{id}/clips`
+
 ## Planned (later phases)
 
-- `POST /api/videos/{id}/highlights`
 - `POST /api/clips/{id}/render`
 - `PATCH /api/clips/{id}`
 - `POST /api/clips/export`

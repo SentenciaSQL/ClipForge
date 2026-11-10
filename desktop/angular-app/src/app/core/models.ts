@@ -133,3 +133,41 @@ export interface Transcription {
   segments?: TranscriptionSegment[] | null;
   words?: TranscriptionWord[] | null;
 }
+
+export interface Highlight {
+  id: string;
+  video_id: string;
+  start_seconds: number;
+  end_seconds: number;
+  duration_seconds: number;
+  transcript: string | null;
+  hook: string | null;
+  category: string | null;
+  description: string | null;
+  score: number;
+  score_breakdown?: Record<string, number> | null;
+  reason: string | null;
+  selected: boolean;
+  rank: number | null;
+  created_at: string;
+}
+
+export interface Clip {
+  id: string;
+  project_id: string;
+  video_id: string;
+  highlight_id: string | null;
+  title: string | null;
+  start_seconds: number;
+  end_seconds: number;
+  duration_seconds: number;
+  score: number;
+  category: string | null;
+  hook: string | null;
+  transcript: string | null;
+  reframing_mode: string;
+  status: string;
+  output_path: string | null;
+  created_at: string;
+  updated_at: string;
+}
