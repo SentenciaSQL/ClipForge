@@ -1,0 +1,18 @@
+{
+  "name": "Minimal",
+  "slug": "minimal",
+  "font_family": "Source Sans 3",
+  "font_size": 48,
+  "primary_color": "#F5F5F5",
+  "highlight_color": "#F5F5F5",
+  "outline_color": "#000000",
+  "outline_width": 2,
+  "shadow": 1,
+  "position": "bottom",
+  "max_lines": 2,
+  "alignment": "center",
+  "word_highlight": false,
+  "animation_preset": "none",
+  "uppercase": false,
+  "bold": false
+}

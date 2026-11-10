@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import 'primeicons/primeicons.css';
+
+:root {
+  --avc-canvas: #0b0d12;
+  --avc-panel: #12151d;
+  --avc-elevated: #181c27;
+  --avc-line: #2a3142;
+  --avc-ink: #e8ecf5;
+  --avc-muted: #939bb0;
+  --avc-accent: #3dd6c6;
+  --avc-accent-soft: #1f6f68;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(61, 214, 198, 0.12), transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, rgba(80, 110, 255, 0.08), transparent 50%),
+    var(--avc-canvas);
+  color: var(--avc-ink);
+  font-family: 'IBM Plex Sans', Segoe UI, sans-serif;
+}
+
+body {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.avc-panel {
+  @apply rounded-2xl border border-line bg-panel/90 backdrop-blur;
+}
+
+.avc-label {
+  @apply text-xs uppercase tracking-[0.16em] text-muted;
+}
+
+.avc-title {
+  @apply font-display text-2xl font-semibold tracking-tight text-ink;
+}
+
+.avc-btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition;
+}
+
+.avc-btn-primary {
+  @apply avc-btn bg-accent text-canvas hover:brightness-110;
+}
+
+.avc-btn-ghost {
+  @apply avc-btn border border-line bg-transparent text-ink hover:border-accent/50 hover:text-accent;
+}
+
+.avc-input {
+  @apply w-full rounded-xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none transition focus:border-accent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2f374a;
+  border-radius: 999px;
+}

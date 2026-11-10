@@ -1,0 +1,18 @@
+{
+  "name": "TikTok",
+  "slug": "tiktok",
+  "font_family": "Komika Axis",
+  "font_size": 68,
+  "primary_color": "#FFFFFF",
+  "highlight_color": "#FF3B5C",
+  "outline_color": "#000000",
+  "outline_width": 5,
+  "shadow": 0,
+  "position": "center",
+  "max_lines": 2,
+  "alignment": "center",
+  "word_highlight": true,
+  "animation_preset": "pop",
+  "uppercase": false,
+  "bold": true
+}

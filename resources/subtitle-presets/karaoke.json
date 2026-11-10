@@ -1,0 +1,18 @@
+{
+  "name": "Karaoke",
+  "slug": "karaoke",
+  "font_family": "Inter",
+  "font_size": 64,
+  "primary_color": "#E8E8E8",
+  "highlight_color": "#00E5A8",
+  "outline_color": "#111111",
+  "outline_width": 3,
+  "shadow": 1,
+  "position": "bottom",
+  "max_lines": 1,
+  "alignment": "center",
+  "word_highlight": true,
+  "animation_preset": "karaoke",
+  "uppercase": false,
+  "bold": true
+}

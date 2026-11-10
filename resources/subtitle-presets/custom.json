@@ -1,0 +1,18 @@
+{
+  "name": "Custom",
+  "slug": "custom",
+  "font_family": "Montserrat",
+  "font_size": 60,
+  "primary_color": "#FFFFFF",
+  "highlight_color": "#FFD166",
+  "outline_color": "#000000",
+  "outline_width": 3,
+  "shadow": 1,
+  "position": "center",
+  "max_lines": 2,
+  "alignment": "center",
+  "word_highlight": true,
+  "animation_preset": "none",
+  "uppercase": false,
+  "bold": true
+}

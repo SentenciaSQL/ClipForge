@@ -1,0 +1,18 @@
+{
+  "name": "Professional",
+  "slug": "professional",
+  "font_family": "IBM Plex Sans",
+  "font_size": 52,
+  "primary_color": "#FFFFFF",
+  "highlight_color": "#4DA3FF",
+  "outline_color": "#0A0A0A",
+  "outline_width": 2,
+  "shadow": 2,
+  "position": "bottom",
+  "max_lines": 2,
+  "alignment": "center",
+  "word_highlight": true,
+  "animation_preset": "fade",
+  "uppercase": false,
+  "bold": false
+}
