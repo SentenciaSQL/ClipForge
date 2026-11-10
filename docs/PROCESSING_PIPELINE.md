@@ -10,10 +10,10 @@
 | 4 | Transcription | 2 ✅ | Faster-Whisper (+ cache) |
 | 5 | Semantic analysis | 3 ✅ | Ollama Qwen3 (chunked JSON) |
 | 6 | Highlight selection | 3 ✅ | Snap + score + dedupe |
-| 7 | Visual analysis | 4 | OpenCV / scene detect |
-| 8 | Subtitle generation | 4 | ASS from word timestamps |
-| 9 | Rendering | 4 | FFmpeg (+ NVENC when available) |
-| 10 | Export | 4 | Copy to `workspace/exports` |
+| 7 | Visual analysis | 4 ✅ | OpenCV face sampling / reframe plan |
+| 8 | Subtitle generation | 4 ✅ | ASS from word timestamps |
+| 9 | Rendering | 4 ✅ | FFmpeg (+ NVENC when available) |
+| 10 | Export | 4 ✅ | Copy to `workspace/exports` |
 
 Audio Studio mixing hooks into stage 9 via `app/media/audio`.
 

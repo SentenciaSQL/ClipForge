@@ -4,24 +4,24 @@ Fully local AI-powered video clipping desktop application. Analyze long-form vid
 
 ## Status
 
-**Phase 3 — AI Highlight Detection: implemented**
+**Phase 4 — Video Processing: implemented**
 
 Working today:
 
 - FastAPI backend with SQLite persistence
 - Hardware detection (FFmpeg, CUDA, Ollama)
 - Project CRUD
-- Video import (MP4/MOV/MKV/AVI/…) with FFprobe metadata extraction
-- Local audio extraction + Faster-Whisper transcription (word-level timestamps, language detection, cache)
-- Local Ollama semantic analysis with overlapping transcript chunks
-- 12–30s candidate generation, weighted scoring, overlap dedupe, clip persistence
+- Video import + local Whisper transcription + Ollama highlight detection
+- 12–30s candidate generation, weighted scoring, overlap dedupe
+- ASS subtitle burn-in with word highlighting
+- Smart/center/blurred vertical reframing (OpenCV face sampling)
+- Local FFmpeg render to 1080×1920 MP4 + batch export
 - Background job worker with cancellation + GPU/LLM lock
-- Dashboard / settings / jobs / highlights / clips APIs + WebSocket job snapshots
-- Angular 19 + Tauri 2 desktop shell with live progress and Clips Studio
+- Angular Clips Studio + Export Library wired to live render jobs
 - Built-in subtitle preset JSON library
-- Audio Studio foundation modules (analyzer + FFmpeg mix filter builders)
+- Audio Studio foundation modules (mixer/ducking builders ready for UI)
 
-Later phases: smart reframing, ASS subtitle burn-in, FFmpeg export, full Audio Studio UI, packaging.
+Later phases: full Audio Studio timeline UI, packaging/optimization.
 
 ## Repository layout
 

@@ -7,7 +7,7 @@
 | 1 Foundation | Repo, backend, Angular/Tauri, SQLite, import + metadata | **Complete** |
 | 2 Transcription | Audio extract, Faster-Whisper, word timestamps | **Complete** |
 | 3 Highlights | Ollama Qwen3, chunking, scoring, 12–30s clips | **Complete** |
-| 4 Video processing | Clip, ASS subs, reframe, FFmpeg render, batch export | Pending |
+| 4 Video processing | Clip, ASS subs, reframe, FFmpeg render, batch export | **Complete** |
 | 5 Desktop UI polish | Full screens wired to live endpoints | Partial in Phase 1 |
 | 6 Optimization | GPU mgr, cache, cancel/recovery, packaging | Pending |
 | Audio Studio | Tracks, mix, ducking, Audio Studio UI | Foundation modules in Phase 1 |
@@ -57,16 +57,24 @@ Executed successfully:
 - Analyze jobs now run through highlight selection; later stages deferred
 - Angular Clips Studio lists scored candidates; Import/Generate show selected clips
 
-## Phase 4 next (awaiting approval)
+## Phase 4 deliverables
 
-1. Smart reframing profiles
-2. ASS subtitle generation from word timestamps
-3. FFmpeg clip render + batch export
-4. Wire Audio Studio mix into render
+- ASS subtitle generator with word-level highlighting (clip-relative timestamps)
+- Reframing modes: auto/smart crop/center crop/blurred background + content profiles
+- OpenCV face sampling for smart crop
+- FFmpeg renderer (NVENC when available, libx264 fallback) → 1080×1920 MP4
+- `POST /api/clips/{id}/render`, `PATCH /api/clips/{id}`, `POST /api/clips/export`
+- Clips Studio render controls + Export Library batch export UI
+
+## Phase 5 / Audio Studio next (awaiting approval)
+
+1. Full Audio Studio timeline UI + track APIs
+2. Ducking/loudnorm applied during final render
+3. Broader desktop polish / packaging
 
 ## Blockers observed in this cloud agent environment
 
-- No NVIDIA GPU / CUDA (`nvidia-smi` missing) — CPU path used; Whisper verification uses `small`/`tiny`; Ollama runs on CPU
+- No NVIDIA GPU / CUDA (`nvidia-smi` missing) — CPU path used; Whisper verification uses `small`/`tiny`; Ollama runs on CPU; encoding uses libx264
 - Angular CLI not global — use `npx @angular/cli@19`
 - Target OS is Windows 11; this agent runs Linux — scripts are PowerShell for Windows, backend verified on Linux
 

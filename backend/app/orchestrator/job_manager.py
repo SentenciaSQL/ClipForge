@@ -78,6 +78,16 @@ class JobManager:
 
         return self.submit(job_id, lambda: run_phase2_analyze_job(job_id))
 
+    def submit_render(self, job_id: str) -> Future[None]:
+        from app.orchestrator.render_pipeline import run_render_job
+
+        return self.submit(job_id, lambda: run_render_job(job_id))
+
+    def submit_batch_export(self, job_id: str) -> Future[None]:
+        from app.orchestrator.render_pipeline import run_batch_export_job
+
+        return self.submit(job_id, lambda: run_batch_export_job(job_id))
+
     def shutdown(self, wait: bool = False) -> None:
         self._executor.shutdown(wait=wait, cancel_futures=True)
 
