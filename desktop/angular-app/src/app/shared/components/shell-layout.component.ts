@@ -113,7 +113,7 @@ import {
         </nav>
 
         <div class="mt-4 rounded-xl border border-line bg-canvas/60 p-3 text-xs text-muted">
-          Phase 6 active: GPU unload, cache recovery, and packaging polish.
+          Waveforms + optional local speaker diarization available.
         </div>
       </aside>
 

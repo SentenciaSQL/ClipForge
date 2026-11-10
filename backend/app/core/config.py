@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     whisper_device: Literal["auto", "cuda", "cpu"] = "auto"
     whisper_compute_type: str = "auto"
 
+    # Optional Hugging Face token for pyannote diarization model download (free account).
+    hf_token: str = ""
+    diarization_engine: Literal["auto", "local", "pyannote"] = "auto"
+    diarization_max_speakers: int = 4
+
     prefer_gpu: bool = True
     max_concurrent_jobs: int = 1
     use_nvenc: Literal["auto", "true", "false"] = "auto"

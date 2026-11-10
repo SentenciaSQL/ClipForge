@@ -106,6 +106,7 @@ export interface TranscriptionWord {
   end: number;
   confidence: number | null;
   index?: number;
+  speaker_label?: string | null;
 }
 
 export interface TranscriptionSegment {
@@ -115,7 +116,36 @@ export interface TranscriptionSegment {
   text: string;
   avg_logprob: number | null;
   no_speech_prob: number | null;
+  speaker_label?: string | null;
   words: TranscriptionWord[];
+}
+
+export interface Speaker {
+  id: string;
+  video_id: string;
+  label: string;
+  display_name: string | null;
+  metadata_json?: Record<string, unknown> | null;
+}
+
+export interface WaveformTrack {
+  track_id: string;
+  track_type: string;
+  label: string;
+  muted: boolean;
+  volume: number;
+  ducking_enabled: boolean;
+  peaks: number[];
+  duration_seconds?: number;
+  error?: string;
+}
+
+export interface ClipWaveforms {
+  clip_id: string;
+  duration_seconds: number;
+  start_seconds: number;
+  end_seconds: number;
+  waveforms: WaveformTrack[];
 }
 
 export interface Transcription {

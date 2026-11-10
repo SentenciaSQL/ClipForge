@@ -1,9 +1,27 @@
 import { DecimalPipe, NgFor, NgIf } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import {
+  AfterViewChecked,
+  Component,
+  ElementRef,
+  OnDestroy,
+  OnInit,
+  QueryList,
+  ViewChildren,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription, switchMap, timer } from 'rxjs';
 
-import { AudioStudioState, AudioTrack, Clip, ProcessingJob, Project } from '../../core/models';
+import {
+  AudioStudioState,
+  AudioTrack,
+  Clip,
+  ClipWaveforms,
+  ProcessingJob,
+  Project,
+  WaveformTrack,
+} from '../../core/models';
 import { ApiService } from '../../core/services/api.service';
 
 @Component({
@@ -16,8 +34,7 @@ import { ApiService } from '../../core/services/api.service';
         <div class="avc-label">Sound</div>
         <h1 class="avc-title mt-1">Audio Studio</h1>
         <p class="mt-2 max-w-2xl text-sm text-muted">
-          Mix original, music, and voice-over tracks with sidechain ducking and EBU R128 loudness
-          normalization. Settings apply on the next FFmpeg render.
+          Mix tracks with real waveform timelines, ducking, and loudnorm. Changes apply on the next render.
         </p>
       </header>
 
@@ -124,15 +141,27 @@ import { ApiService } from '../../core/services/api.service';
             </div>
           </div>
 
-          <article class="avc-panel p-4" *ngFor="let track of studio.tracks">
+          <article class="avc-panel p-4" *ngFor="let track of studio.tracks; let i = index">
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div class="avc-label">{{ track.track_type }}</div>
                 <div class="font-medium">{{ track.label }}</div>
-                <div class="text-xs text-muted mt-1 break-all" *ngIf="track.source_path">{{ track.source_path }}</div>
               </div>
               <div class="flex gap-2" *ngIf="track.track_type !== 'original'">
                 <button class="avc-btn-ghost text-xs" type="button" (click)="removeTrack(track)">Remove</button>
+              </div>
+            </div>
+
+            <div class="mt-3 rounded-xl border border-line bg-canvas/70 p-2">
+              <canvas
+                #waveCanvas
+                class="h-16 w-full"
+                height="64"
+                [attr.data-track-id]="track.id"
+              ></canvas>
+              <div class="mt-1 flex justify-between text-[10px] uppercase tracking-wide text-muted">
+                <span>0s</span>
+                <span>{{ studio.duration_seconds | number: '1.1-1' }}s</span>
               </div>
             </div>
 
@@ -182,29 +211,6 @@ import { ApiService } from '../../core/services/api.service';
                   <option [ngValue]="false">Off</option>
                 </select>
               </label>
-              <label class="block" *ngIf="track.track_type !== 'music'">
-                <span class="avc-label">Fade in (s)</span>
-                <input
-                  class="avc-input mt-2"
-                  type="number"
-                  step="0.1"
-                  [(ngModel)]="track.fade_in_seconds"
-                  (change)="patchTrack(track, { fade_in_seconds: track.fade_in_seconds })"
-                />
-              </label>
-            </div>
-
-            <div class="mt-4">
-              <div class="h-8 rounded-lg bg-canvas border border-line overflow-hidden relative">
-                <div
-                  class="absolute inset-y-0 left-0 rounded-lg"
-                  [style.width.%]="laneWidth(track)"
-                  [style.background]="laneColor(track)"
-                ></div>
-                <div class="absolute inset-0 flex items-center px-3 text-xs font-medium">
-                  {{ track.label }} · {{ track.muted ? 'muted' : 'live' }}
-                </div>
-              </div>
             </div>
           </article>
         </section>
@@ -212,13 +218,17 @@ import { ApiService } from '../../core/services/api.service';
     </div>
   `,
 })
-export class AudioStudioComponent implements OnInit, OnDestroy {
+export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked {
   private readonly api = inject(ApiService);
   private pollSub: Subscription | null = null;
+  private paintedKey = '';
+
+  @ViewChildren('waveCanvas') private waveCanvases!: QueryList<ElementRef<HTMLCanvasElement>>;
 
   readonly projects = signal<Project[]>([]);
   readonly clips = signal<Clip[]>([]);
   readonly state = signal<AudioStudioState | null>(null);
+  readonly waveforms = signal<ClipWaveforms | null>(null);
   readonly job = signal<ProcessingJob | null>(null);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
@@ -239,9 +249,14 @@ export class AudioStudioComponent implements OnInit, OnDestroy {
     this.pollSub?.unsubscribe();
   }
 
+  ngAfterViewChecked(): void {
+    this.paintWaveforms();
+  }
+
   loadClips(): void {
     this.selectedClipId = '';
     this.state.set(null);
+    this.waveforms.set(null);
     if (!this.selectedProjectId) {
       this.clips.set([]);
       return;
@@ -255,14 +270,25 @@ export class AudioStudioComponent implements OnInit, OnDestroy {
   loadAudio(): void {
     if (!this.selectedClipId) {
       this.state.set(null);
+      this.waveforms.set(null);
       return;
     }
     this.api.getAudioStudio(this.selectedClipId).subscribe({
       next: (state) => {
         this.state.set(state);
         this.presetSlug = state.mix_settings.preset_slug || '';
+        this.loadWaveforms();
       },
       error: (err) => this.error.set(err?.error?.detail || 'Failed to load audio studio'),
+    });
+  }
+
+  loadWaveforms(): void {
+    if (!this.selectedClipId) return;
+    this.paintedKey = '';
+    this.api.getClipWaveforms(this.selectedClipId).subscribe({
+      next: (waves) => this.waveforms.set(waves),
+      error: (err) => this.error.set(err?.error?.detail || 'Failed to load waveforms'),
     });
   }
 
@@ -278,7 +304,10 @@ export class AudioStudioComponent implements OnInit, OnDestroy {
   applyPreset(): void {
     if (!this.selectedClipId || !this.presetSlug) return;
     this.api.applyAudioPreset(this.selectedClipId, this.presetSlug).subscribe({
-      next: (state) => this.state.set(state),
+      next: (state) => {
+        this.state.set(state);
+        this.loadWaveforms();
+      },
       error: (err) => this.error.set(err?.error?.detail || 'Failed to apply preset'),
     });
   }
@@ -293,6 +322,8 @@ export class AudioStudioComponent implements OnInit, OnDestroy {
             tracks: studio.tracks.map((item) => (item.id === updated.id ? updated : item)),
           };
         });
+        this.paintedKey = '';
+        this.paintWaveforms();
       },
       error: (err) => this.error.set(err?.error?.detail || 'Failed to update track'),
     });
@@ -354,15 +385,60 @@ export class AudioStudioComponent implements OnInit, OnDestroy {
     });
   }
 
-  laneWidth(track: AudioTrack): number {
-    return Math.max(8, Math.min(100, (track.muted ? 0.15 : track.volume) * 50));
+  private paintWaveforms(): void {
+    const data = this.waveforms();
+    const studio = this.state();
+    if (!data || !studio || !this.waveCanvases?.length) return;
+    const key = `${data.clip_id}:${data.waveforms.map((w) => w.track_id).join(',')}:${studio.tracks
+      .map((t) => `${t.id}:${t.muted}:${t.volume}`)
+      .join('|')}`;
+    if (key === this.paintedKey) return;
+    this.paintedKey = key;
+
+    const byId = new Map<string, WaveformTrack>(data.waveforms.map((item) => [item.track_id, item]));
+    this.waveCanvases.forEach((ref) => {
+      const canvas = ref.nativeElement;
+      const trackId = canvas.getAttribute('data-track-id') || '';
+      const wave = byId.get(trackId);
+      const track = studio.tracks.find((item) => item.id === trackId);
+      this.drawWave(canvas, wave?.peaks || [], track);
+    });
   }
 
-  laneColor(track: AudioTrack): string {
-    if (track.muted) return 'rgba(148,163,184,0.35)';
-    if (track.track_type === 'music') return 'rgba(34,197,94,0.45)';
-    if (track.track_type === 'voiceover') return 'rgba(56,189,248,0.45)';
-    if (track.track_type === 'replacement') return 'rgba(251,146,60,0.45)';
-    return 'rgba(250,204,21,0.4)';
+  private drawWave(canvas: HTMLCanvasElement, peaks: number[], track?: AudioTrack): void {
+    const width = canvas.clientWidth || 640;
+    canvas.width = width;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, width, 64);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+    ctx.fillRect(0, 0, width, 64);
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    ctx.beginPath();
+    ctx.moveTo(0, 32);
+    ctx.lineTo(width, 32);
+    ctx.stroke();
+
+    const color = this.waveColor(track);
+    const count = peaks.length || 1;
+    const barWidth = Math.max(width / count, 1);
+    const gain = track?.muted ? 0.15 : Math.min(Math.max(track?.volume ?? 1, 0.2), 1.6);
+    for (let i = 0; i < peaks.length; i++) {
+      const amplitude = Math.max(peaks[i] * gain, 0.02);
+      const h = amplitude * 54;
+      const x = i * barWidth;
+      const y = 32 - h / 2;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, Math.max(barWidth * 0.7, 1), h);
+    }
+  }
+
+  private waveColor(track?: AudioTrack): string {
+    if (!track || track.muted) return 'rgba(148,163,184,0.55)';
+    if (track.track_type === 'music') return 'rgba(34,197,94,0.85)';
+    if (track.track_type === 'voiceover') return 'rgba(56,189,248,0.85)';
+    if (track.track_type === 'replacement') return 'rgba(251,146,60,0.85)';
+    return 'rgba(250,204,21,0.9)';
   }
 }

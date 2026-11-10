@@ -16,6 +16,7 @@ class WordOut(BaseModel):
     end: float
     confidence: float | None = None
     index: int = 0
+    speaker_label: str | None = None
 
 
 class SegmentOut(BaseModel):
@@ -25,6 +26,7 @@ class SegmentOut(BaseModel):
     text: str
     avg_logprob: float | None = None
     no_speech_prob: float | None = None
+    speaker_label: str | None = None
     words: list[WordOut] = Field(default_factory=list)
 
 

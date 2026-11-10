@@ -88,6 +88,11 @@ class JobManager:
 
         return self.submit(job_id, lambda: run_batch_export_job(job_id))
 
+    def submit_diarize(self, job_id: str) -> Future[None]:
+        from app.orchestrator.diarize_pipeline import run_diarize_job
+
+        return self.submit(job_id, lambda: run_diarize_job(job_id))
+
     def shutdown(self, wait: bool = False) -> None:
         self._executor.shutdown(wait=wait, cancel_futures=True)
 

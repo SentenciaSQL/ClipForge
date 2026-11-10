@@ -133,11 +133,18 @@ def transcription_to_out(
                         end=float(w.get("end", 0)),
                         confidence=w.get("confidence"),
                         index=idx,
+                        speaker_label=w.get("speaker_label"),
                     )
                 )
                 idx += 1
         word_out = flat
     else:
+        label_by_index: dict[int, str | None] = {}
+        flat_idx = 0
+        for seg in segments_raw:
+            for w in seg.get("words", []) or []:
+                label_by_index[flat_idx] = w.get("speaker_label")
+                flat_idx += 1
         word_out = [
             WordOut(
                 word=w.word,
@@ -145,6 +152,7 @@ def transcription_to_out(
                 end=w.end,
                 confidence=w.confidence,
                 index=w.index,
+                speaker_label=label_by_index.get(w.index),
             )
             for w in sorted(words, key=lambda item: item.index)
         ]
@@ -159,12 +167,14 @@ def transcription_to_out(
                 text=str(seg.get("text", "")),
                 avg_logprob=seg.get("avg_logprob"),
                 no_speech_prob=seg.get("no_speech_prob"),
+                speaker_label=seg.get("speaker_label"),
                 words=[
                     WordOut(
                         word=str(w.get("word", "")),
                         start=float(w.get("start", 0)),
                         end=float(w.get("end", 0)),
                         confidence=w.get("confidence"),
+                        speaker_label=w.get("speaker_label"),
                     )
                     for w in seg.get("words", [])
                 ],

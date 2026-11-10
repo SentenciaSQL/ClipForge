@@ -8,11 +8,13 @@ import {
   AudioStudioState,
   AudioTrack,
   Clip,
+  ClipWaveforms,
   DashboardStats,
   Highlight,
   ProcessingJob,
   Project,
   SourceVideo,
+  Speaker,
   SubtitlePreset,
   Transcription,
   VideoImportResponse,
@@ -202,5 +204,30 @@ export class ApiService {
 
   retryJob(jobId: string): Observable<ProcessingJob> {
     return this.http.post<ProcessingJob>(`${this.baseUrl}/jobs/${jobId}/retry`, {});
+  }
+
+  getClipWaveforms(clipId: string, numPeaks = 480): Observable<ClipWaveforms> {
+    return this.http.get<ClipWaveforms>(`${this.baseUrl}/clips/${clipId}/waveforms?num_peaks=${numPeaks}`);
+  }
+
+  diarizeVideo(
+    videoId: string,
+    body: { engine?: string; max_speakers?: number } = { engine: 'local' }
+  ): Observable<ProcessingJob> {
+    return this.http.post<ProcessingJob>(`${this.baseUrl}/videos/${videoId}/diarize`, body);
+  }
+
+  listSpeakers(videoId: string): Observable<Speaker[]> {
+    return this.http.get<Speaker[]>(`${this.baseUrl}/videos/${videoId}/speakers`);
+  }
+
+  renameSpeaker(speakerId: string, displayName: string): Observable<Speaker> {
+    return this.http.patch<Speaker>(`${this.baseUrl}/speakers/${speakerId}`, {
+      display_name: displayName,
+    });
+  }
+
+  getDiarizationStatus(): Observable<Record<string, unknown>> {
+    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/diarization/status`);
   }
 }

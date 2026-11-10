@@ -3,7 +3,7 @@ import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription, switchMap, timer } from 'rxjs';
 
-import { Clip, ProcessingJob, SourceVideo, Transcription } from '../../core/models';
+import { Clip, ProcessingJob, SourceVideo, Speaker, Transcription } from '../../core/models';
 import { ApiService } from '../../core/services/api.service';
 
 @Component({
@@ -89,6 +89,14 @@ import { ApiService } from '../../core/services/api.service';
           <button class="avc-btn-primary" type="submit" [disabled]="!selectedVideoId || busy()">
             Run full analysis
           </button>
+          <button
+            class="avc-btn-ghost"
+            type="button"
+            (click)="runDiarization()"
+            [disabled]="!selectedVideoId || busy()"
+          >
+            Detect speakers (optional)
+          </button>
           <button class="avc-btn-ghost" type="button" *ngIf="job()" (click)="cancel()" [disabled]="!busy()">
             Cancel
           </button>
@@ -110,12 +118,39 @@ import { ApiService } from '../../core/services/api.service';
         </div>
       </section>
 
+      <section class="avc-panel p-5" *ngIf="speakers().length">
+        <div class="avc-label">Speakers</div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <div
+            class="rounded-lg border border-line px-3 py-2 text-sm"
+            *ngFor="let speaker of speakers()"
+            [style.borderColor]="speakerColor(speaker.label)"
+          >
+            <span class="font-medium">{{ speaker.display_name || speaker.label }}</span>
+            <span class="text-xs text-muted ml-2">{{ speaker.label }}</span>
+          </div>
+        </div>
+      </section>
+
       <section class="avc-panel p-5" *ngIf="transcription() as tx">
         <div class="avc-label">Latest transcription</div>
         <p class="mt-2 text-sm text-muted">
           {{ tx.language }} · {{ tx.segment_count }} segments · {{ tx.word_count }} words
         </p>
-        <p class="mt-3 whitespace-pre-wrap text-sm">{{ tx.full_text }}</p>
+        <div class="mt-3 space-y-2" *ngIf="tx.segments?.length; else plainText">
+          <p class="text-sm" *ngFor="let seg of tx.segments">
+            <span
+              class="mr-2 inline-block rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+              [style.background]="speakerColor(seg.speaker_label || '')"
+              *ngIf="seg.speaker_label"
+              >{{ speakerName(seg.speaker_label) }}</span
+            >
+            {{ seg.text }}
+          </p>
+        </div>
+        <ng-template #plainText>
+          <p class="mt-3 whitespace-pre-wrap text-sm">{{ tx.full_text }}</p>
+        </ng-template>
       </section>
 
       <section class="avc-panel p-5" *ngIf="clips().length">
@@ -144,6 +179,7 @@ export class ClipGenerationComponent implements OnInit, OnDestroy {
   readonly job = signal<ProcessingJob | null>(null);
   readonly transcription = signal<Transcription | null>(null);
   readonly clips = signal<Clip[]>([]);
+  readonly speakers = signal<Speaker[]>([]);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -226,5 +262,63 @@ export class ClipGenerationComponent implements OnInit, OnDestroy {
       return;
     }
     this.api.cancelJob(current.id).subscribe();
+  }
+
+  runDiarization(): void {
+    if (!this.selectedVideoId) return;
+    this.busy.set(true);
+    this.error.set(null);
+    this.api.diarizeVideo(this.selectedVideoId, { engine: 'local', max_speakers: 2 }).subscribe({
+      next: (job) => {
+        this.job.set(job);
+        this.pollSub?.unsubscribe();
+        this.pollSub = timer(0, 1200)
+          .pipe(switchMap(() => this.api.getJob(job.id)))
+          .subscribe({
+            next: (updated) => {
+              this.job.set(updated);
+              if (['completed', 'failed', 'cancelled'].includes(updated.status)) {
+                this.busy.set(false);
+                this.pollSub?.unsubscribe();
+                this.pollSub = null;
+                if (updated.status === 'completed') {
+                  this.api.listSpeakers(this.selectedVideoId).subscribe({
+                    next: (speakers) => this.speakers.set(speakers),
+                  });
+                  this.api.getVideoTranscription(this.selectedVideoId).subscribe({
+                    next: (tx) => this.transcription.set(tx),
+                  });
+                }
+                if (updated.status === 'failed') {
+                  this.error.set(updated.error || 'Diarization failed');
+                }
+              }
+            },
+          });
+      },
+      error: (err) => {
+        this.busy.set(false);
+        this.error.set(err?.error?.detail || 'Failed to start diarization');
+      },
+    });
+  }
+
+  speakerColor(label: string): string {
+    if (!label) return 'rgba(148,163,184,0.35)';
+    const palette = [
+      'rgba(250,204,21,0.35)',
+      'rgba(56,189,248,0.35)',
+      'rgba(34,197,94,0.35)',
+      'rgba(251,146,60,0.35)',
+      'rgba(244,114,182,0.35)',
+    ];
+    let hash = 0;
+    for (let i = 0; i < label.length; i++) hash = (hash + label.charCodeAt(i) * (i + 1)) % palette.length;
+    return palette[hash];
+  }
+
+  speakerName(label: string): string {
+    const match = this.speakers().find((item) => item.label === label);
+    return match?.display_name || label;
   }
 }
