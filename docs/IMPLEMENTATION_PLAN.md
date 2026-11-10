@@ -9,7 +9,7 @@
 | 3 Highlights | Ollama Qwen3, chunking, scoring, 12–30s clips | **Complete** |
 | 4 Video processing | Clip, ASS subs, reframe, FFmpeg render, batch export | **Complete** |
 | 5 Desktop UI + Audio Studio | Tracks, mix/ducking/loudnorm, UI polish | **Complete** |
-| 6 Optimization | GPU mgr, cache, cancel/recovery, packaging | Packaging notes started |
+| 6 Optimization | GPU mgr, cache, cancel/recovery, packaging | **Complete** |
 
 ## Phase 1 deliverables
 
@@ -75,11 +75,13 @@ Executed successfully:
 - Subtitle Editor loads live presets from API
 - Packaging notes in `docs/PACKAGING.md`
 
-## Phase 6 next (awaiting approval)
+## Phase 6 deliverables
 
-1. Stronger GPU memory manager / model unload
-2. Broader cache invalidation + crash recovery
-3. Tauri sidecar packaging + Windows installer polish
+- `GpuManager` serializes Whisper/Ollama ownership and unloads Whisper before LLM/render
+- Cache inventory + clear APIs (`/api/system/cache`)
+- Startup recovery marks stranded jobs as `interrupted`; `POST /api/jobs/{id}/retry`
+- Settings UI: GPU unload + cache clear + system status
+- Tauri sidecar bootstrap + `scripts/Build-Release.ps1` (PyInstaller + NSIS/MSI)
 
 ## Blockers observed in this cloud agent environment
 

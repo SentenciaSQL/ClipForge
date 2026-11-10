@@ -9,33 +9,30 @@
 
 - Backend: FastAPI on `http://127.0.0.1:8000`
 - Angular: `npx ng serve` (or via Start-Dev)
-- Tauri: `cd desktop/src-tauri && cargo tauri dev` when Rust toolchain is present
+- Tauri: `cd desktop\angular-app && npm run tauri -- dev`
 
-## Windows production build (target machine)
-
-1. Install Node 20+, Rust stable, WebView2, FFmpeg (with libass), Ollama, CUDA toolkit (optional for RTX).
-2. Build Angular:
+## One-shot Windows release build
 
 ```powershell
-cd desktop\angular-app
-npm ci
-npx ng build --configuration=production
+.\scripts\Build-Release.ps1
 ```
 
-3. Build Tauri installer:
+Flags:
 
-```powershell
-cd desktop
-npm run tauri build
-```
+- `-SkipSidecar` — only frontend + Tauri (expects external API)
+- `-SkipTauri` — build Angular + PyInstaller sidecar only
 
-Artifacts land under `desktop/src-tauri/target/release/bundle/` (MSI / NSIS).
+What it does:
 
-4. Bundle Python backend options:
-   - **Dev-adjacent**: ship `backend/` + `.venv` and launch uvicorn from Tauri sidecar.
-   - **Packaged**: PyInstaller onepass for `backend/main.py` as `ai-video-clipper-api.exe`, register as Tauri sidecar.
+1. `ng build --configuration=production`
+2. PyInstaller onefile → `desktop/angular-app/src-tauri/sidecars/ai-video-clipper-api(.exe)`
+3. `tauri build` → NSIS + MSI under `src-tauri/target/release/bundle/`
 
-Recommended sidecar env:
+## Sidecar runtime
+
+On launch, Tauri (`src-tauri/src/lib.rs`) checks `127.0.0.1:8000`. If down, it starts the packaged sidecar from app resources and waits for health. Closing the window kills the child process.
+
+Recommended sidecar env (set automatically / override as needed):
 
 ```
 AVC_HOST=127.0.0.1
@@ -43,14 +40,21 @@ AVC_PORT=8000
 AVC_WORKSPACE_PATH=%APPDATA%\AIVideoClipper\workspace
 ```
 
-## GPU / VRAM notes (RTX 4070 Ti Super 16GB)
+## GPU / VRAM (RTX 4070 Ti Super 16GB)
 
-- Whisper `large-v3` + float16 fits alone; keep `JobManager.gpu_lock` so Whisper and Ollama never overlap.
-- Prefer NVENC (`h264_nvenc`) when `ffmpeg -encoders` lists it.
-- Cache Whisper transcripts under `workspace/temporary/` to avoid re-transcription.
+- `GpuManager` serializes Whisper / Ollama ownership and unloads Whisper before LLM / render
+- `POST /api/system/gpu/unload-whisper` frees model weights + `torch.cuda.empty_cache()` when available
+- Prefer NVENC when FFmpeg lists `h264_nvenc`
 
-## Recovery
+## Cache & recovery
 
-- Cancel jobs via `POST /api/jobs/{id}/cancel`
-- Failed renders leave ASS under `workspace/temporary/.../renders/` for inspection
-- Re-run `POST /api/clips/{id}/render` after Audio Studio mix changes
+- Inventory: `GET /api/system/cache`
+- Clear: `POST /api/system/cache/clear` `{ "kind": "all"|"transcription"|"renders"|"audio_extract" }`
+- Startup marks leftover `queued`/`running` jobs as `interrupted`
+- Retry: `POST /api/jobs/{id}/retry`
+
+## Manual packaging notes
+
+- Bundle FFmpeg (+libass) on PATH or set `AVC_FFMPEG_PATH`
+- Install Ollama separately; pull `qwen3:8b` (or configured model)
+- Whisper models download on first use into the Faster-Whisper cache

@@ -148,10 +148,20 @@ Body: `{ "clip_ids": ["..."], "render_if_needed": true }`
 - `PATCH|DELETE /api/audio-tracks/{id}`
 - `GET /api/audio-presets`
 
-## Planned (later phases)
+### System / recovery
 
-- Packaging / optimization endpoints as needed
-- Audio Studio leftovers:
+- `GET /api/system/status`
+- `GET /api/system/gpu`
+- `POST /api/system/gpu/unload-whisper`
+- `GET /api/system/cache`
+- `POST /api/system/cache/clear`
+- `POST /api/system/recovery/scan`
+- `POST /api/jobs/{id}/retry`
+
+## Planned (optional follow-ups)
+
+- Deeper Audio Studio waveform UI
+- Optional extras:
   - `POST /api/clips/{id}/audio/import`
   - `GET /api/clips/{id}/audio`
   - `PATCH /api/clips/{id}/audio`

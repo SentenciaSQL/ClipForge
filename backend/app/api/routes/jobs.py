@@ -13,6 +13,7 @@ from app.database.models import ProcessingJob
 from app.orchestrator.job_manager import job_manager
 from app.schemas.common import MessageResponse
 from app.schemas.jobs import ProcessingJobOut
+from app.services.recovery import retry_job
 
 router = APIRouter()
 
@@ -49,3 +50,12 @@ def cancel_job(job_id: str, db: Session = Depends(get_db)) -> MessageResponse:
         job.message = "Cancellation requested"
         db.commit()
     return MessageResponse(message="Cancellation requested")
+
+
+@router.post("/jobs/{job_id}/retry", response_model=ProcessingJobOut)
+def retry_job_endpoint(job_id: str, db: Session = Depends(get_db)) -> ProcessingJobOut:
+    try:
+        clone = retry_job(db, job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ProcessingJobOut.model_validate(clone)
