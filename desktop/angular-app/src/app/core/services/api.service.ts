@@ -4,7 +4,9 @@ import { Observable } from 'rxjs';
 
 import {
   AppSettings,
+  Clip,
   DashboardStats,
+  Highlight,
   ProcessingJob,
   Project,
   SourceVideo,
@@ -80,6 +82,20 @@ export class ApiService {
     return this.http.get<Transcription>(
       `${this.baseUrl}/videos/${videoId}/transcription?include_details=${includeDetails}`
     );
+  }
+
+  getVideoHighlights(videoId: string, selectedOnly = false): Observable<Highlight[]> {
+    return this.http.get<Highlight[]>(
+      `${this.baseUrl}/videos/${videoId}/highlights?selected_only=${selectedOnly}`
+    );
+  }
+
+  getVideoClips(videoId: string): Observable<Clip[]> {
+    return this.http.get<Clip[]>(`${this.baseUrl}/videos/${videoId}/clips`);
+  }
+
+  getProjectClips(projectId: string): Observable<Clip[]> {
+    return this.http.get<Clip[]>(`${this.baseUrl}/projects/${projectId}/clips`);
   }
 
   listJobs(): Observable<ProcessingJob[]> {

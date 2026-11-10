@@ -1,26 +1,25 @@
-"""Analysis pipeline stages for Phase 2 (through transcription)."""
+"""Analysis pipeline stages through Phase 3 highlight selection."""
 
 from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
+from app.ai.highlights.analyzer import highlight_analyzer
+from app.ai.llm.ollama_client import OllamaError
 from app.ai.transcription.whisper_service import whisper_service
 from app.core.logging import get_logger
-from app.database.models import ProcessingJob, SourceVideo
+from app.database.models import ProcessingJob, SourceVideo, Transcription
 from app.database.session import SessionLocal
 from app.orchestrator.job_manager import job_manager
-from app.services.transcriptions import extract_audio_for_video, persist_transcription
+from app.services.highlights import persist_highlights
+from app.services.transcriptions import extract_audio_for_video, get_latest_transcription, persist_transcription
 
 logger = get_logger(__name__)
 
-ProgressCallback = Callable[[str, float, str, dict[str, Any] | None], None]
-
-PHASE2_TERMINAL_STAGES = {
-    "semantic_analysis",
-    "highlight_selection",
+PHASE3_DEFERRED_STAGES = {
     "visual_analysis",
     "subtitle_generation",
     "rendering",
@@ -70,15 +69,43 @@ def _set_deferred_later_stages(stages: list[dict[str, Any]]) -> list[dict[str, A
     result: list[dict[str, Any]] = []
     for stage in stages:
         item = dict(stage)
-        if item.get("stage") in PHASE2_TERMINAL_STAGES and item.get("status") == "pending":
+        if item.get("stage") in PHASE3_DEFERRED_STAGES and item.get("status") in {"pending", "deferred"}:
             item["status"] = "deferred"
             item["message"] = "Scheduled for a later phase"
         result.append(item)
     return result
 
 
+def _fail_job(
+    db,
+    job: ProcessingJob,
+    stages: list[dict[str, Any]],
+    stage: str,
+    error: str,
+    started: float,
+) -> None:
+    stages = _update_stage_list(
+        stages,
+        stage,
+        "failed",
+        message=error,
+        duration_ms=int((time.perf_counter() - started) * 1000),
+    )
+    job.stages_json = stages
+    job.status = "failed"
+    job.error = error
+    job.current_stage = stage
+    job.finished_at = _utcnow()
+    db.commit()
+
+
 def run_phase2_analyze_job(job_id: str) -> None:
-    """Execute audio extraction + transcription for an analyze job."""
+    """Backward-compatible entrypoint name used by JobManager."""
+    run_analyze_job(job_id)
+
+
+def run_analyze_job(job_id: str) -> None:
+    """Execute audio → transcription → semantic analysis → highlight selection."""
     db = SessionLocal()
     try:
         job = db.get(ProcessingJob, job_id)
@@ -105,12 +132,20 @@ def run_phase2_analyze_job(job_id: str) -> None:
         language = settings.get("language")
         whisper_model = settings.get("whisper_model")
         force = bool(settings.get("force", False))
+        clip_count = int(settings.get("clip_count") or 5)
+        min_duration = int(settings.get("min_duration") or 12)
+        max_duration = int(settings.get("max_duration") or 30)
+        ollama_model = settings.get("ollama_model")
+        subtitle_preset = settings.get("subtitle_preset") or "hormozi"
 
         stages = list(job.stages_json or [])
         job.status = "running"
         job.started_at = job.started_at or _utcnow()
+        job.error = None
+
+        # -------- Stage: audio extraction --------
         job.current_stage = "audio_extraction"
-        job.progress = 10.0
+        job.progress = 8.0
         job.message = "Extracting audio with FFmpeg"
         stages = _update_stage_list(stages, "audio_extraction", "running")
         job.stages_json = stages
@@ -128,31 +163,21 @@ def run_phase2_analyze_job(job_id: str) -> None:
             audio_path = extract_audio_for_video(video)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Audio extraction failed for job %s", job_id)
-            stages = _update_stage_list(
-                stages,
-                "audio_extraction",
-                "failed",
-                message=str(exc),
-                duration_ms=int((time.perf_counter() - started) * 1000),
-            )
-            job.stages_json = stages
-            job.status = "failed"
-            job.error = f"Audio extraction failed: {exc}"
-            job.current_stage = "audio_extraction"
-            job.finished_at = _utcnow()
-            db.commit()
+            _fail_job(db, job, stages, "audio_extraction", f"Audio extraction failed: {exc}", started)
             return
 
-        audio_ms = int((time.perf_counter() - started) * 1000)
         stages = _update_stage_list(
             stages,
             "audio_extraction",
             "completed",
             message=str(audio_path),
-            duration_ms=audio_ms,
+            duration_ms=int((time.perf_counter() - started) * 1000),
         )
         job.stages_json = stages
-        job.progress = 35.0
+        db.commit()
+
+        # -------- Stage: transcription --------
+        job.progress = 25.0
         job.current_stage = "transcription"
         job.message = "Transcribing with Faster-Whisper"
         stages = _update_stage_list(stages, "transcription", "running")
@@ -167,87 +192,199 @@ def run_phase2_analyze_job(job_id: str) -> None:
             return
 
         started = time.perf_counter()
-        acquired = job_manager.gpu_lock.acquire(timeout=3600)
-        if not acquired:
-            job.status = "failed"
-            job.error = "Timed out waiting for GPU lock"
-            job.finished_at = _utcnow()
-            db.commit()
-            return
+        transcription: Transcription | None = None
+        if not force:
+            transcription = get_latest_transcription(db, video.id)
 
-        try:
-            result = whisper_service.transcribe(
-                Path(audio_path),
-                video_id=video.id,
-                model_name=whisper_model,
-                language=language or None,
-                use_cache=not force,
-            )
-            transcription = persist_transcription(db, video, result)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Transcription failed for job %s", job_id)
-            db.rollback()
-            job = db.get(ProcessingJob, job_id)
-            if not job:
+        if transcription is None:
+            acquired = job_manager.gpu_lock.acquire(timeout=3600)
+            if not acquired:
+                _fail_job(db, job, stages, "transcription", "Timed out waiting for GPU lock", started)
                 return
-            stages = list(job.stages_json or [])
-            stages = _update_stage_list(
-                stages,
-                "transcription",
-                "failed",
-                message=str(exc),
-                duration_ms=int((time.perf_counter() - started) * 1000),
-            )
-            job.stages_json = stages
-            job.status = "failed"
-            job.error = f"Transcription failed: {exc}"
-            job.current_stage = "transcription"
-            job.finished_at = _utcnow()
-            db.commit()
-            return
-        finally:
-            job_manager.gpu_lock.release()
+            try:
+                result = whisper_service.transcribe(
+                    Path(audio_path),
+                    video_id=video.id,
+                    model_name=whisper_model,
+                    language=language or None,
+                    use_cache=not force,
+                )
+                transcription = persist_transcription(db, video, result)
+                tx_meta = {
+                    "language": result.language,
+                    "language_probability": result.language_probability,
+                    "model_name": result.model_name,
+                    "device": result.device,
+                    "word_count": len(result.words),
+                    "segment_count": len(result.segments),
+                    "audio_path": result.audio_path,
+                    "full_text_preview": (result.full_text or "")[:500],
+                }
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Transcription failed for job %s", job_id)
+                db.rollback()
+                job = db.get(ProcessingJob, job_id)
+                if not job:
+                    return
+                stages = list(job.stages_json or [])
+                _fail_job(db, job, stages, "transcription", f"Transcription failed: {exc}", started)
+                return
+            finally:
+                job_manager.gpu_lock.release()
+        else:
+            tx_meta = {
+                "language": transcription.language,
+                "language_probability": transcription.language_probability,
+                "model_name": transcription.model_name,
+                "word_count": len(transcription.segments_json or []),
+                "segment_count": len(transcription.segments_json or []),
+                "audio_path": transcription.audio_path,
+                "full_text_preview": (transcription.full_text or "")[:500],
+                "reused_existing": True,
+            }
 
-        # persist_transcription commits and may expire instances; reload job.
         job = db.get(ProcessingJob, job_id)
         video = db.get(SourceVideo, video.id)
-        if not job:
+        transcription = db.get(Transcription, transcription.id) if transcription else None
+        if not job or not video or not transcription:
             return
 
-        tx_ms = int((time.perf_counter() - started) * 1000)
         stages = list(job.stages_json or [])
         stages = _update_stage_list(
             stages,
             "transcription",
             "completed",
-            message=f"language={result.language} words={len(result.words)}",
-            duration_ms=tx_ms,
+            message=f"language={transcription.language}",
+            duration_ms=int((time.perf_counter() - started) * 1000),
+        )
+        job.stages_json = stages
+        job.result_json = {**(job.result_json or {}), "transcription_id": transcription.id, **tx_meta}
+        db.commit()
+
+        # -------- Stage: semantic analysis + highlight selection --------
+        job.progress = 55.0
+        job.current_stage = "semantic_analysis"
+        job.message = "Analyzing transcript with local Ollama model"
+        stages = _update_stage_list(stages, "semantic_analysis", "running")
+        job.stages_json = stages
+        db.commit()
+
+        if job_manager.is_cancelled(job_id):
+            job.status = "cancelled"
+            job.message = "Cancelled before semantic analysis"
+            job.finished_at = _utcnow()
+            db.commit()
+            return
+
+        started = time.perf_counter()
+        segments = list(transcription.segments_json or [])
+        acquired = job_manager.gpu_lock.acquire(timeout=3600)
+        if not acquired:
+            _fail_job(db, job, stages, "semantic_analysis", "Timed out waiting for GPU/LLM lock", started)
+            return
+
+        try:
+            selected = highlight_analyzer.analyze_transcription(
+                segments,
+                model=ollama_model,
+                clip_count=clip_count,
+                min_seconds=min_duration,
+                max_seconds=max_duration,
+                video_duration=video.duration_seconds,
+            )
+            # analyzer already returns selected/distinct; keep a scored pool = selected for persistence rank.
+            raw_pool = list(selected)
+        except OllamaError as exc:
+            logger.exception("Semantic analysis failed for job %s", job_id)
+            _fail_job(db, job, stages, "semantic_analysis", str(exc), started)
+            return
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Semantic analysis failed for job %s", job_id)
+            _fail_job(db, job, stages, "semantic_analysis", f"Semantic analysis failed: {exc}", started)
+            return
+        finally:
+            job_manager.gpu_lock.release()
+
+        job = db.get(ProcessingJob, job_id)
+        video = db.get(SourceVideo, video.id)
+        if not job or not video:
+            return
+        stages = list(job.stages_json or [])
+        stages = _update_stage_list(
+            stages,
+            "semantic_analysis",
+            "completed",
+            message=f"candidates={len(raw_pool)}",
+            duration_ms=int((time.perf_counter() - started) * 1000),
+        )
+        job.stages_json = stages
+        job.progress = 80.0
+        job.current_stage = "highlight_selection"
+        job.message = "Selecting distinct 12–30s highlights"
+        stages = _update_stage_list(stages, "highlight_selection", "running")
+        job.stages_json = stages
+        db.commit()
+
+        started = time.perf_counter()
+        try:
+            # Re-run selection is already done; persist selected + same pool.
+            highlights, clips = persist_highlights(
+                db,
+                video,
+                candidates=raw_pool,
+                selected=selected,
+                subtitle_preset_slug=subtitle_preset,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Highlight persistence failed for job %s", job_id)
+            db.rollback()
+            job = db.get(ProcessingJob, job_id)
+            if not job:
+                return
+            stages = list(job.stages_json or [])
+            _fail_job(db, job, stages, "highlight_selection", f"Highlight selection failed: {exc}", started)
+            return
+
+        job = db.get(ProcessingJob, job_id)
+        if not job:
+            return
+        stages = list(job.stages_json or [])
+        stages = _update_stage_list(
+            stages,
+            "highlight_selection",
+            "completed",
+            message=f"selected={len(clips)} highlights={len(highlights)}",
+            duration_ms=int((time.perf_counter() - started) * 1000),
         )
         stages = _set_deferred_later_stages(stages)
         job.stages_json = stages
         job.progress = 100.0
         job.status = "completed"
-        job.current_stage = "transcription"
+        job.current_stage = "highlight_selection"
         job.message = (
-            f"Phase 2 complete: transcribed ({result.language or 'unknown'}), "
-            f"{len(result.words)} words. Later stages deferred."
+            f"Phase 3 complete: {len(clips)} clips selected from local semantic analysis. "
+            "Rendering deferred."
         )
         job.error = None
         job.finished_at = _utcnow()
         job.result_json = {
             **(job.result_json or {}),
-            "transcription_id": transcription.id,
-            "language": result.language,
-            "language_probability": result.language_probability,
-            "model_name": result.model_name,
-            "device": result.device,
-            "word_count": len(result.words),
-            "segment_count": len(result.segments),
-            "audio_path": result.audio_path,
-            "full_text_preview": (result.full_text or "")[:500],
+            "highlight_count": len(highlights),
+            "selected_clip_count": len(clips),
+            "clips": [
+                {
+                    "id": clip.id,
+                    "hook": clip.hook,
+                    "score": clip.score,
+                    "start_seconds": clip.start_seconds,
+                    "end_seconds": clip.end_seconds,
+                    "category": clip.category,
+                }
+                for clip in clips
+            ],
         }
         db.commit()
-        logger.info("Job %s completed transcription %s", job_id, transcription.id)
+        logger.info("Job %s completed with %s clips", job_id, len(clips))
     finally:
         db.close()
         job_manager.clear_cancel(job_id)

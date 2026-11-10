@@ -57,12 +57,3 @@ def project_videos(project_id: str, db: Session = Depends(get_db)) -> list[Sourc
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return [video_to_out(video) for video in list_videos(db, project_id)]
-
-
-@router.get("/projects/{project_id}/clips")
-def project_clips(project_id: str, db: Session = Depends(get_db)) -> list[dict]:
-    """Phase 1 placeholder — clips are produced in later phases."""
-    project = project_service.get_project(db, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return []

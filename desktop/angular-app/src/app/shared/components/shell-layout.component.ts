@@ -113,7 +113,7 @@ import {
         </nav>
 
         <div class="mt-4 rounded-xl border border-line bg-canvas/60 p-3 text-xs text-muted">
-          Phase 2 active: local Faster-Whisper transcription. Highlight detection comes in Phase 3.
+          Phase 3 active: local Ollama highlight detection and 12–30s clip scoring.
         </div>
       </aside>
 

@@ -6,7 +6,7 @@
 |-------|-------|--------|
 | 1 Foundation | Repo, backend, Angular/Tauri, SQLite, import + metadata | **Complete** |
 | 2 Transcription | Audio extract, Faster-Whisper, word timestamps | **Complete** |
-| 3 Highlights | Ollama Qwen3, chunking, scoring, 12–30s clips | Pending |
+| 3 Highlights | Ollama Qwen3, chunking, scoring, 12–30s clips | **Complete** |
 | 4 Video processing | Clip, ASS subs, reframe, FFmpeg render, batch export | Pending |
 | 5 Desktop UI polish | Full screens wired to live endpoints | Partial in Phase 1 |
 | 6 Optimization | GPU mgr, cache, cancel/recovery, packaging | Pending |
@@ -46,17 +46,27 @@ Executed successfully:
 - Job cancellation endpoint
 - Angular Import + Generate screens poll live job progress and show transcript
 
-## Phase 3 next (awaiting approval)
+## Phase 3 deliverables
 
-1. Ollama Qwen3 chunked semantic analysis
-2. Candidate generation 12–30s with boundary validation
-3. Weighted scoring + overlap dedupe
-4. Persist highlights / selected clips
+- Ollama client with JSON-mode chat + model availability checks
+- Overlapping transcript chunking (≈90s windows / 20s overlap)
+- Semantic highlight proposals validated with Pydantic
+- Timestamp snapping onto real transcript segments (12–30s)
+- Weighted viral-potential scoring + overlap dedupe
+- Persist `Highlight` + candidate `Clip` rows
+- Analyze jobs now run through highlight selection; later stages deferred
+- Angular Clips Studio lists scored candidates; Import/Generate show selected clips
+
+## Phase 4 next (awaiting approval)
+
+1. Smart reframing profiles
+2. ASS subtitle generation from word timestamps
+3. FFmpeg clip render + batch export
+4. Wire Audio Studio mix into render
 
 ## Blockers observed in this cloud agent environment
 
-- No NVIDIA GPU / CUDA (`nvidia-smi` missing) — CPU path used; verification uses `small`/`tiny`
-- Ollama not installed — required for Phase 3
+- No NVIDIA GPU / CUDA (`nvidia-smi` missing) — CPU path used; Whisper verification uses `small`/`tiny`; Ollama runs on CPU
 - Angular CLI not global — use `npx @angular/cli@19`
 - Target OS is Windows 11; this agent runs Linux — scripts are PowerShell for Windows, backend verified on Linux
 

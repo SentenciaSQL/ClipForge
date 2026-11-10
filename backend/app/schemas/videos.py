@@ -58,6 +58,7 @@ class AnalyzeRequest(BaseModel):
 
     language: str | None = Field(default=None, description="ISO language code or null for auto")
     whisper_model: str | None = None
+    ollama_model: str | None = None
     force: bool = Field(default=False, description="Ignore transcription cache and re-run Whisper")
     clip_count: int = Field(default=5, ge=1, le=50)
     min_duration: int = Field(default=12, ge=12, le=30)
