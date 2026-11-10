@@ -134,6 +134,10 @@ class WhisperService:
         with self._lock:
             self._model = None
             self._loaded_key = None
+            # Drop references aggressively so CTranslate2 can release GPU/CPU memory.
+            import gc
+
+            gc.collect()
 
     def _load_audio_array(self, audio_path: Path):
         """Return float32 mono PCM for Faster-Whisper without going through PyAV."""

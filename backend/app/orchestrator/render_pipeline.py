@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+from app.core.gpu_manager import gpu_manager
 from app.core.logging import get_logger
 from app.database.models import ProcessingJob
 from app.database.session import SessionLocal
@@ -96,6 +97,7 @@ def run_render_job(job_id: str) -> None:
             job.stages_json = stages
             db.commit()
 
+            gpu_manager.prepare_for_render()
             clip = render_clip_asset(
                 db,
                 job.clip_id,

@@ -1,4 +1,4 @@
-import { JsonPipe, NgIf } from '@angular/common';
+import { DecimalPipe, JsonPipe, NgIf } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -8,13 +8,13 @@ import { ApiService } from '../../core/services/api.service';
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [NgIf, FormsModule, JsonPipe],
+  imports: [NgIf, FormsModule, JsonPipe, DecimalPipe],
   template: `
     <div class="space-y-6">
       <header>
         <div class="avc-label">Configuration</div>
         <h1 class="avc-title mt-1">Settings</h1>
-        <p class="mt-2 text-sm text-muted">Local paths, models, and rendering defaults. No cloud keys required.</p>
+        <p class="mt-2 text-sm text-muted">Local paths, models, rendering defaults, and system maintenance.</p>
       </header>
 
       <div *ngIf="message()" class="rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
@@ -75,6 +75,28 @@ import { ApiService } from '../../core/services/api.service';
         </div>
       </form>
 
+      <section class="avc-panel p-5 space-y-4">
+        <div>
+          <div class="avc-label">System maintenance</div>
+          <p class="mt-1 text-sm text-muted">
+            Unload Whisper to free VRAM, inspect cache, or clear temporary artifacts.
+          </p>
+        </div>
+        <div class="text-sm" *ngIf="system() as sys">
+          <div>GPU holder: {{ $any(sys['gpu'])?.holder || 'none' }} · Whisper loaded:
+            {{ $any(sys['gpu'])?.whisper_loaded ? 'yes' : 'no' }}</div>
+          <div class="mt-1 text-muted">
+            Cache: {{ ($any(sys['cache'])?.total_bytes || 0) / 1048576 | number: '1.1-1' }} MB across
+            {{ $any(sys['cache'])?.entry_count || 0 }} entries
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button class="avc-btn-ghost" type="button" (click)="refreshSystem()">Refresh status</button>
+          <button class="avc-btn-ghost" type="button" (click)="unloadGpu()">Unload Whisper</button>
+          <button class="avc-btn-ghost" type="button" (click)="clearAllCache()">Clear all cache</button>
+        </div>
+      </section>
+
       <section class="avc-panel p-5" *ngIf="settings() as s">
         <div class="avc-label">Detected hardware</div>
         <pre class="mt-3 overflow-auto rounded-xl bg-canvas p-4 text-xs text-muted">{{ s.hardware | json }}</pre>
@@ -85,6 +107,7 @@ import { ApiService } from '../../core/services/api.service';
 export class SettingsComponent implements OnInit {
   private readonly api = inject(ApiService);
   readonly settings = signal<AppSettings | null>(null);
+  readonly system = signal<Record<string, unknown> | null>(null);
   readonly message = signal<string | null>(null);
   readonly error = signal<string | null>(null);
 
@@ -92,6 +115,34 @@ export class SettingsComponent implements OnInit {
     this.api.getSettings().subscribe({
       next: (settings) => this.settings.set(settings),
       error: (err) => this.error.set(err?.message || 'Failed to load settings'),
+    });
+    this.refreshSystem();
+  }
+
+  refreshSystem(): void {
+    this.api.getSystemStatus().subscribe({
+      next: (status) => this.system.set(status),
+      error: (err) => this.error.set(err?.error?.detail || 'Failed to load system status'),
+    });
+  }
+
+  unloadGpu(): void {
+    this.api.unloadWhisper().subscribe({
+      next: (result) => {
+        this.message.set(`Whisper unload: was_loaded=${result['was_loaded']}`);
+        this.refreshSystem();
+      },
+      error: (err) => this.error.set(err?.error?.detail || 'Unload failed'),
+    });
+  }
+
+  clearAllCache(): void {
+    this.api.clearCache({ kind: 'all' }).subscribe({
+      next: (result) => {
+        this.message.set(`Cleared ${result['removed_paths']} paths · freed ${result['freed_bytes']} bytes`);
+        this.refreshSystem();
+      },
+      error: (err) => this.error.set(err?.error?.detail || 'Cache clear failed'),
     });
   }
 

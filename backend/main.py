@@ -16,6 +16,7 @@ from app.core.logging import configure_logging, get_logger
 from app.database.session import SessionLocal, init_db
 from app.orchestrator.job_manager import job_manager
 from app.services.audio_studio import seed_audio_presets
+from app.services.recovery import recover_interrupted_jobs
 from app.services.seed import seed_subtitle_presets
 
 logger = get_logger(__name__)
@@ -31,6 +32,12 @@ async def lifespan(_app: FastAPI):
     try:
         seed_subtitle_presets(db)
         seed_audio_presets(db)
+        recovery = recover_interrupted_jobs(db)
+        if recovery.get("interrupted_count"):
+            logger.warning(
+                "Recovered %s interrupted job(s) from previous run",
+                recovery["interrupted_count"],
+            )
     finally:
         db.close()
     hardware = detect_hardware()

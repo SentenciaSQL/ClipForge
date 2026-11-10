@@ -4,16 +4,17 @@ Fully local AI-powered video clipping desktop application. Analyze long-form vid
 
 ## Status
 
-**Phase 5 — Audio Studio + desktop polish: implemented**
+**Phase 6 — Optimization + packaging: implemented**
 
 Working today:
 
-- Full local pipeline: import → Whisper → Ollama highlights → ASS + reframe → FFmpeg export
-- Audio Studio: original/music/voice-over tracks, ducking, loudnorm/limiter on render
-- Angular screens wired to live APIs (Import, Generate, Clips, Export, Audio, Subtitles, Settings)
-- Packaging notes for Tauri / Windows sidecar builds
+- Full local pipeline: import → Whisper → Ollama highlights → ASS + reframe → audio mix → FFmpeg export
+- GPU manager unloads Whisper before Ollama/render to protect 16GB VRAM workflows
+- Cache inventory/clear + interrupted-job recovery + job retry
+- Audio Studio + all Angular screens wired to live APIs
+- Tauri sidecar bootstrap and `scripts/Build-Release.ps1` for Windows NSIS/MSI builds
 
-Later: Phase 6 optimization (GPU manager, cache/recovery, installer polish).
+See `docs/PACKAGING.md` for release steps.
 
 ## Repository layout
 

@@ -183,4 +183,24 @@ export class ApiService {
   updateSettings(patch: Partial<AppSettings>): Observable<AppSettings> {
     return this.http.patch<AppSettings>(`${this.baseUrl}/settings`, patch);
   }
+
+  getSystemStatus(): Observable<Record<string, unknown>> {
+    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/system/status`);
+  }
+
+  clearCache(body: {
+    kind?: string;
+    video_id?: string;
+    older_than_hours?: number;
+  } = { kind: 'all' }): Observable<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(`${this.baseUrl}/system/cache/clear`, body);
+  }
+
+  unloadWhisper(): Observable<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(`${this.baseUrl}/system/gpu/unload-whisper`, {});
+  }
+
+  retryJob(jobId: string): Observable<ProcessingJob> {
+    return this.http.post<ProcessingJob>(`${this.baseUrl}/jobs/${jobId}/retry`, {});
+  }
 }

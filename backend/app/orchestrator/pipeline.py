@@ -9,6 +9,7 @@ from typing import Any
 
 from app.ai.highlights.analyzer import highlight_analyzer
 from app.ai.llm.ollama_client import OllamaError
+from app.core.gpu_manager import gpu_manager
 from app.ai.transcription.whisper_service import whisper_service
 from app.core.logging import get_logger
 from app.database.models import ProcessingJob, SourceVideo, Transcription
@@ -197,7 +198,11 @@ def run_analyze_job(job_id: str) -> None:
             transcription = get_latest_transcription(db, video.id)
 
         if transcription is None:
-            acquired = job_manager.gpu_lock.acquire(timeout=3600)
+            if force:
+                from app.services.cache_service import invalidate_transcription_cache
+
+                invalidate_transcription_cache(video.id)
+            acquired = gpu_manager.acquire("whisper", timeout=3600)
             if not acquired:
                 _fail_job(db, job, stages, "transcription", "Timed out waiting for GPU lock", started)
                 return
@@ -230,7 +235,9 @@ def run_analyze_job(job_id: str) -> None:
                 _fail_job(db, job, stages, "transcription", f"Transcription failed: {exc}", started)
                 return
             finally:
-                job_manager.gpu_lock.release()
+                # Free Whisper VRAM before Ollama takes the GPU.
+                gpu_manager.prepare_for_llm()
+                gpu_manager.release()
         else:
             tx_meta = {
                 "language": transcription.language,
@@ -278,7 +285,8 @@ def run_analyze_job(job_id: str) -> None:
 
         started = time.perf_counter()
         segments = list(transcription.segments_json or [])
-        acquired = job_manager.gpu_lock.acquire(timeout=3600)
+        gpu_manager.prepare_for_llm()
+        acquired = gpu_manager.acquire("ollama", timeout=3600)
         if not acquired:
             _fail_job(db, job, stages, "semantic_analysis", "Timed out waiting for GPU/LLM lock", started)
             return
@@ -303,7 +311,7 @@ def run_analyze_job(job_id: str) -> None:
             _fail_job(db, job, stages, "semantic_analysis", f"Semantic analysis failed: {exc}", started)
             return
         finally:
-            job_manager.gpu_lock.release()
+            gpu_manager.release()
 
         job = db.get(ProcessingJob, job_id)
         video = db.get(SourceVideo, video.id)
