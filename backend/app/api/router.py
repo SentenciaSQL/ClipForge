@@ -8,6 +8,7 @@ from app.api.routes import (
     audio,
     clips,
     dashboard,
+    diarization,
     health,
     highlights,
     jobs,
@@ -17,6 +18,7 @@ from app.api.routes import (
     system,
     transcriptions,
     videos,
+    waveforms,
 )
 
 api_router = APIRouter(prefix="/api")
@@ -28,6 +30,8 @@ api_router.include_router(transcriptions.router, tags=["transcriptions"])
 api_router.include_router(highlights.router, tags=["highlights"])
 api_router.include_router(clips.router, tags=["clips"])
 api_router.include_router(audio.router, tags=["audio"])
+api_router.include_router(waveforms.router, tags=["waveforms"])
+api_router.include_router(diarization.router, tags=["diarization"])
 api_router.include_router(presets.router, tags=["presets"])
 api_router.include_router(jobs.router, tags=["jobs"])
 api_router.include_router(system.router, tags=["system"])

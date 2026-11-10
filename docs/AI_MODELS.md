@@ -38,7 +38,15 @@ Responses are validated with Pydantic (`HighlightProposalBatch`). LLM timestamps
 
 ## Speaker diarization — optional
 
-Pyannote Audio when installed and authorized. The core pipeline must succeed without it.
+Two engines:
+
+| Engine | Cost | Requirements |
+|--------|------|--------------|
+| `local` (default fallback) | Free, offline | NumPy only — spectral/energy clustering |
+| `pyannote` | Free local inference | Optional `pyannote.audio` + free HF token to download weights once (`AVC_HF_TOKEN`) |
+
+`POST /api/videos/{id}/diarize` with `{ "engine": "auto"|"local"|"pyannote" }`.  
+Core clip pipeline succeeds without diarization. Speaker labels are written onto transcript words/segments when available.
 
 ## Vision
 

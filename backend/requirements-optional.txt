@@ -1,0 +1,10 @@
+# Optional extras — not required for the core local clip pipeline.
+# Speaker diarization with pyannote (free HF account/token for first download):
+#   pip install -r requirements-optional.txt
+#   set AVC_HF_TOKEN=hf_...
+#
+# Without these packages the app uses the built-in local spectral clustering engine.
+
+pyannote.audio>=3.3.0
+torch>=2.2.0
+torchaudio>=2.2.0

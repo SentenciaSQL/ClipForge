@@ -14,6 +14,8 @@ Working today:
 - Audio Studio + all Angular screens wired to live APIs
 - Tauri sidecar bootstrap and `scripts/Build-Release.ps1` for Windows NSIS/MSI builds
 
+Also available: Audio Studio waveform timelines and optional local speaker diarization (no paid APIs).
+
 See `docs/PACKAGING.md` for release steps.
 
 ## Repository layout

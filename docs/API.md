@@ -148,6 +148,14 @@ Body: `{ "clip_ids": ["..."], "render_if_needed": true }`
 - `PATCH|DELETE /api/audio-tracks/{id}`
 - `GET /api/audio-presets`
 
+### Waveforms / diarization
+
+- `GET /api/clips/{id}/waveforms` — peak envelopes for Audio Studio timelines
+- `GET /api/diarization/status`
+- `POST /api/videos/{id}/diarize` — optional local/pyannote speaker separation
+- `GET /api/videos/{id}/speakers`
+- `PATCH /api/speakers/{id}` — rename display name
+
 ### System / recovery
 
 - `GET /api/system/status`

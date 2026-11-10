@@ -83,6 +83,12 @@ Executed successfully:
 - Settings UI: GPU unload + cache clear + system status
 - Tauri sidecar bootstrap + `scripts/Build-Release.ps1` (PyInstaller + NSIS/MSI)
 
+## Follow-up: waveforms + optional diarization
+
+- Audio Studio canvas waveforms from `GET /api/clips/{id}/waveforms`
+- Optional local speaker diarization (NumPy clustering) + pyannote when installed
+- Speaker labels on transcript segments in Clip Generation UI
+
 ## Blockers observed in this cloud agent environment
 
 - No NVIDIA GPU / CUDA (`nvidia-smi` missing) — CPU path used; Whisper verification uses `small`/`tiny`; Ollama runs on CPU; encoding uses libx264
