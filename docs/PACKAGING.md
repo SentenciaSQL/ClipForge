@@ -13,6 +13,9 @@
 
 ## One-shot Windows release build
 
+Use **Python 3.12** for the backend venv (3.13 may work for packaging, but Faster-Whisper is pinned for 3.12).  
+Run the script from a **normal** (non-Administrator) PowerShell window.
+
 ```powershell
 .\scripts\Build-Release.ps1
 ```
