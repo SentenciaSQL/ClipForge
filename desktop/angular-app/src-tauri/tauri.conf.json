@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "AI Video Clipper",
   "version": "0.6.0",
-  "identifier": "com.aivideoclipper.app",
+  "identifier": "com.aivideoclipper.desktop",
   "build": {
     "frontendDist": "../dist/angular-app/browser",
     "devUrl": "http://127.0.0.1:4200",

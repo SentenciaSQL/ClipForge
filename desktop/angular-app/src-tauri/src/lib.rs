@@ -5,6 +5,8 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
+use tauri::Manager;
+
 struct BackendState(Mutex<Option<Child>>);
 
 fn backend_healthy() -> bool {
@@ -75,7 +77,7 @@ pub fn run() {
         )?;
       }
       let state = app.state::<BackendState>();
-      if let Err(err) = spawn_sidecar_backend(&state) {
+      if let Err(err) = spawn_sidecar_backend(&*state) {
         log::warn!("Sidecar startup skipped/failed: {err}");
       }
       Ok(())
