@@ -5,11 +5,21 @@
 /tmp
 /out-tsc
 /bazel-out
+/coverage
 
 # Node
 /node_modules
 npm-debug.log
 yarn-error.log
+pnpm-debug.log
+
+# Local installers / packages accidentally dropped here
+*.exe
+*.msi
+*.dmg
+*.AppImage
+*.deb
+*.rpm
 
 # IDEs and editors
 .idea/
