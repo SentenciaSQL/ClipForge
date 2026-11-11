@@ -22,6 +22,7 @@ def snap_window(
     min_seconds: float = 12.0,
     max_seconds: float = 30.0,
     video_duration: float | None = None,
+    min_words: int = 5,
 ) -> tuple[float, float, str] | None:
     """
     Validate and adjust a proposed window against transcript segments.
@@ -29,6 +30,9 @@ def snap_window(
     - Prefer complete segment boundaries
     - Expand/shrink into [min_seconds, max_seconds]
     - Reject windows that cannot cover real transcript content
+
+    For sparse dialogue (trailers, ads), expansion may span silence between lines
+    so wall-clock duration reaches min_seconds even when speech is short.
     """
     if not segments:
         return None
@@ -62,7 +66,8 @@ def snap_window(
     while duration < min_seconds and (start_idx > 0 or end_idx < len(ordered) - 1):
         can_left = start_idx > 0
         can_right = end_idx < len(ordered) - 1
-        if can_right and (not can_left or (ordered[end_idx]["end"] - snapped_start) <= max_seconds):
+        # Prefer expanding toward more content; allow exceeding max briefly then shrink.
+        if can_right and (not can_left or (float(ordered[end_idx]["end"]) - snapped_start) <= max_seconds + 1.0):
             end_idx += 1
             snapped_end = float(ordered[end_idx]["end"])
         elif can_left:
@@ -70,6 +75,20 @@ def snap_window(
             snapped_start = float(ordered[start_idx]["start"])
         else:
             break
+        duration = snapped_end - snapped_start
+
+    # If still short, pad with silence up to min_seconds within the video bounds.
+    # Trailers often have sparse dialogue lines shorter than 12s even after merging.
+    if duration < min_seconds:
+        deficit = min_seconds - duration
+        pad_left = min(deficit / 2.0, snapped_start)
+        pad_right = deficit - pad_left
+        snapped_start = max(0.0, snapped_start - pad_left)
+        snapped_end = min(max_end, snapped_end + pad_right)
+        # If right hit the wall, push remaining pad to the left.
+        still_short = min_seconds - (snapped_end - snapped_start)
+        if still_short > 0.05:
+            snapped_start = max(0.0, snapped_start - still_short)
         duration = snapped_end - snapped_start
 
     # Shrink from the weaker edge if still too long.
@@ -94,6 +113,7 @@ def snap_window(
         return None
 
     text = _segment_text(ordered, snapped_start, snapped_end)
-    if len(text.split()) < 8:
+    words = [w for w in text.split() if w]
+    if len(words) < max(1, min_words):
         return None
     return snapped_start, snapped_end, text
