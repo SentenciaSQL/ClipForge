@@ -4,12 +4,16 @@ import { Observable } from 'rxjs';
 
 import {
   AppSettings,
+  AspectPreset,
   AudioMixSettings,
   AudioStudioState,
   AudioTrack,
   Clip,
+  ClipConfiguration,
+  ClipConfigurationOut,
   ClipWaveforms,
   DashboardStats,
+  ExportProfile,
   Highlight,
   ProcessingJob,
   Project,
@@ -106,9 +110,86 @@ export class ApiService {
 
   renderClip(
     clipId: string,
-    body: { reframing_mode?: string; subtitle_preset?: string; burn_subtitles?: boolean } = {}
+    body: {
+      reframing_mode?: string;
+      subtitle_preset?: string;
+      burn_subtitles?: boolean | null;
+      preview?: boolean;
+      configuration?: Partial<ClipConfiguration> | Record<string, unknown>;
+    } = {}
   ): Observable<ProcessingJob> {
     return this.http.post<ProcessingJob>(`${this.baseUrl}/clips/${clipId}/render`, body);
+  }
+
+  getClipConfiguration(clipId: string): Observable<ClipConfigurationOut> {
+    return this.http.get<ClipConfigurationOut>(`${this.baseUrl}/clips/${clipId}/configuration`);
+  }
+
+  patchClipConfiguration(
+    clipId: string,
+    body: Record<string, unknown>
+  ): Observable<ClipConfigurationOut> {
+    return this.http.patch<ClipConfigurationOut>(`${this.baseUrl}/clips/${clipId}/configuration`, body);
+  }
+
+  applyConfigurationToClips(
+    clipIds: string[],
+    configuration: Record<string, unknown>,
+    confirmOverwrite = true
+  ): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.baseUrl}/clips/apply-configuration`, {
+      clip_ids: clipIds,
+      configuration,
+      confirm_overwrite: confirmOverwrite,
+    });
+  }
+
+  previewClip(clipId: string, body: Record<string, unknown> = {}): Observable<ProcessingJob> {
+    return this.http.post<ProcessingJob>(`${this.baseUrl}/clips/${clipId}/preview`, body);
+  }
+
+  batchRenderClips(body: {
+    clip_ids: string[];
+    configuration?: Record<string, unknown>;
+    apply_to_all?: boolean;
+    confirm_overwrite?: boolean;
+  }): Observable<ProcessingJob> {
+    return this.http.post<ProcessingJob>(`${this.baseUrl}/clips/batch-render`, body);
+  }
+
+  listExportProfiles(): Observable<ExportProfile[]> {
+    return this.http.get<ExportProfile[]>(`${this.baseUrl}/export-profiles`);
+  }
+
+  createExportProfile(body: {
+    name: string;
+    slug?: string;
+    description?: string;
+    config_json: ClipConfiguration;
+  }): Observable<ExportProfile> {
+    return this.http.post<ExportProfile>(`${this.baseUrl}/export-profiles`, body);
+  }
+
+  updateExportProfile(
+    id: string,
+    body: { name?: string; description?: string; config_json?: ClipConfiguration }
+  ): Observable<ExportProfile> {
+    return this.http.patch<ExportProfile>(`${this.baseUrl}/export-profiles/${id}`, body);
+  }
+
+  deleteExportProfile(id: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.baseUrl}/export-profiles/${id}`);
+  }
+
+  listAspectPresets(): Observable<AspectPreset[]> {
+    return this.http.get<AspectPreset[]>(`${this.baseUrl}/export-options/aspect-ratios`);
+  }
+
+  patchClip(
+    clipId: string,
+    body: Partial<Clip> & { start_seconds?: number; end_seconds?: number }
+  ): Observable<Clip> {
+    return this.http.patch<Clip>(`${this.baseUrl}/clips/${clipId}`, body);
   }
 
   exportClips(clipIds: string[]): Observable<ProcessingJob> {

@@ -198,8 +198,112 @@ export interface Clip {
   reframing_mode: string;
   status: string;
   output_path: string | null;
+  preview_path?: string | null;
+  subtitle_preset_id?: string | null;
+  render_settings?: Record<string, unknown> | null;
+  audio_config?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface SubtitleStyleConfig {
+  font_family: string;
+  font_size: number;
+  font_weight: 'normal' | 'bold';
+  text_color: string;
+  highlight_color: string;
+  outline_color: string;
+  outline_width: number;
+  shadow: number;
+  opacity: number;
+  alignment: 'left' | 'center' | 'right';
+  position: 'top' | 'center' | 'bottom' | 'custom';
+  custom_vertical: number;
+  margin_h: number;
+  max_chars_per_line: number;
+  max_lines: number;
+  animation: string;
+  uppercase: boolean;
+  safe_area: 'none' | 'tiktok' | 'reels' | 'shorts';
+}
+
+export interface ClipConfiguration {
+  schema_version: number;
+  subtitles: {
+    enabled: boolean;
+    preset_slug: string;
+    style: SubtitleStyleConfig;
+    segments?: { text: string; start: number; end: number }[] | null;
+  };
+  video: {
+    aspect_ratio: string;
+    resolution_label: string;
+    width: number;
+    height: number;
+    fps: number | null;
+    preserve_source_fps: boolean;
+    quality_preset: string;
+    crf: number;
+    codec: string;
+    encoder: string;
+  };
+  reframe: {
+    mode: string;
+    background_color: string;
+    focal_x: number;
+    focal_y: number;
+    enable_face_detection: boolean;
+    manual_crop?: { x: number; y: number; width: number; height: number } | null;
+  };
+  audio: {
+    codec: string;
+    bitrate_kbps: number;
+    volume: number;
+  };
+  export: {
+    container: string;
+    filename_pattern: string;
+    output_directory: string | null;
+  };
+  profile_id?: string | null;
+  warnings?: string[];
+}
+
+export interface ClipConfigurationOut {
+  clip_id: string;
+  configuration: ClipConfiguration;
+  source_width: number | null;
+  source_height: number | null;
+  source_fps: number | null;
+  estimated_file_size_bytes: number | null;
+  validation: {
+    ok: boolean;
+    errors: string[];
+    warnings: string[];
+    aspect_ratio?: string;
+    width?: number;
+    height?: number;
+  };
+}
+
+export interface ExportProfile {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  config_json: ClipConfiguration;
+  is_builtin: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AspectPreset {
+  key: string;
+  label: string;
+  aspect_ratio: string;
+  recommended_use: string;
+  default_width: number;
+  default_height: number;
 }
 
 export interface AudioTrack {

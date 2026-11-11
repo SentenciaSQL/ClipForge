@@ -98,12 +98,29 @@ def run_render_job(job_id: str) -> None:
             db.commit()
 
             gpu_manager.prepare_for_render()
+            configuration = None
+            patch = settings.get("configuration_patch") or settings.get("configuration")
+            if isinstance(patch, dict) and patch:
+                from app.database.models import Clip
+                from app.schemas.clip_config import ClipConfigurationPatch
+                from app.services.clip_config import get_clip_configuration, merge_configuration
+
+                clip_row = db.get(Clip, job.clip_id)
+                if clip_row is not None:
+                    current = get_clip_configuration(db, clip_row)
+                    configuration = merge_configuration(
+                        current, ClipConfigurationPatch.model_validate(patch)
+                    )
+
+            burn = settings.get("burn_subtitles")
             clip = render_clip_asset(
                 db,
                 job.clip_id,
                 reframing_mode=settings.get("reframing_mode"),
                 subtitle_preset=settings.get("subtitle_preset"),
-                burn_subtitles=bool(settings.get("burn_subtitles", True)),
+                burn_subtitles=None if burn is None else bool(burn),
+                configuration=configuration,
+                preview=bool(settings.get("preview")),
             )
         except Exception as exc:  # noqa: BLE001
             logger.exception("Render failed for job %s", job_id)
@@ -130,18 +147,20 @@ def run_render_job(job_id: str) -> None:
             return
         stages = list(job.stages_json or [])
         elapsed = int((time.perf_counter() - started) * 1000)
-        stages = _update_stage(stages, "rendering", "completed", message=clip.output_path, duration_ms=elapsed)
-        stages = _update_stage(stages, "export", "completed", message=clip.output_path)
+        out_path = clip.preview_path if bool(settings.get("preview")) else clip.output_path
+        stages = _update_stage(stages, "rendering", "completed", message=out_path, duration_ms=elapsed)
+        stages = _update_stage(stages, "export", "completed", message=out_path)
         job.stages_json = stages
         job.progress = 100.0
         job.status = "completed"
         job.current_stage = "export"
-        job.message = f"Rendered clip → {clip.output_path}"
+        job.message = f"{'Preview' if settings.get('preview') else 'Rendered'} clip → {out_path}"
         job.error = None
         job.finished_at = _utcnow()
         job.result_json = {
             **(job.result_json or {}),
             "output_path": clip.output_path,
+            "preview_path": clip.preview_path,
             "ass_path": clip.ass_path,
             "render_settings": clip.render_settings,
         }

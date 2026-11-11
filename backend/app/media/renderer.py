@@ -27,22 +27,54 @@ class RenderResult:
 
 
 def _escape_subtitles_path(path: Path) -> str:
-    # FFmpeg subtitles filter needs escaped special chars, especially on Windows.
     text = path.resolve().as_posix()
     text = text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
     return text
 
 
-def choose_video_encoder(use_nvenc: str | None = None) -> tuple[str, list[str]]:
+def choose_video_encoder(
+    *,
+    use_nvenc: str | None = None,
+    codec: str = "h264",
+    quality_preset: str = "balanced",
+    crf: int | None = None,
+) -> tuple[str, list[str]]:
     settings = get_settings()
     hardware = detect_hardware()
     preference = (use_nvenc or settings.use_nvenc or "auto").lower()
-    want_nvenc = preference in {"auto", "true", "1", "yes"}
-    if preference == "false":
+    want_nvenc = preference in {"auto", "true", "1", "yes", "nvenc"}
+    if preference in {"false", "cpu"}:
         want_nvenc = False
+
+    quality = (quality_preset or "balanced").lower()
+    crf_value = int(crf if crf is not None else settings.crf)
+    if quality == "fast":
+        crf_value = min(28, crf_value + 4)
+        x264_preset = "veryfast"
+        nvenc_preset = "p1"
+    elif quality == "high":
+        crf_value = max(14, crf_value - 2)
+        x264_preset = "slow"
+        nvenc_preset = "p6"
+    else:
+        x264_preset = "medium"
+        nvenc_preset = "p4"
+
+    codec_name = (codec or "h264").lower()
     if want_nvenc and hardware.ffmpeg_has_nvenc and hardware.cuda_available:
-        return "h264_nvenc", ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", str(settings.crf)]
-    return "libx264", ["-c:v", "libx264", "-preset", "medium", "-crf", str(settings.crf)]
+        if codec_name == "h265":
+            return (
+                "hevc_nvenc",
+                ["-c:v", "hevc_nvenc", "-preset", nvenc_preset, "-rc", "vbr", "-cq", str(crf_value)],
+            )
+        return (
+            "h264_nvenc",
+            ["-c:v", "h264_nvenc", "-preset", nvenc_preset, "-rc", "vbr", "-cq", str(crf_value)],
+        )
+
+    if codec_name == "h265":
+        return "libx265", ["-c:v", "libx265", "-preset", x264_preset, "-crf", str(crf_value)]
+    return "libx264", ["-c:v", "libx264", "-preset", x264_preset, "-crf", str(crf_value)]
 
 
 def render_clip(
@@ -56,12 +88,22 @@ def render_clip(
     fps: int | None = None,
     burn_subtitles: bool = True,
     mix_plan: MixPlan | None = None,
+    codec: str = "h264",
+    encoder: str = "auto",
+    quality_preset: str = "balanced",
+    crf: int | None = None,
+    audio_bitrate_kbps: int = 192,
 ) -> RenderResult:
     settings = get_settings()
     ffmpeg = get_ffmpeg()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    encoder_name, encoder_args = choose_video_encoder()
+    encoder_name, encoder_args = choose_video_encoder(
+        use_nvenc=encoder,
+        codec=codec,
+        quality_preset=quality_preset,
+        crf=crf,
+    )
     target_fps = fps or settings.output_fps
     uses_complex_video = "[" in reframe.filter_chain or ";" in reframe.filter_chain
     apply_mix = mix_plan is not None and bool(mix_plan.filter_complex)
@@ -82,7 +124,6 @@ def render_clip(
             args += ["-i", str(extra)]
 
     if uses_complex_video or apply_mix:
-        # Always unify into a single filter_complex when mixing audio or using labeled video graphs.
         if uses_complex_video:
             video_graph = reframe.filter_chain
             if burn_subtitles and ass_path and ass_path.exists():
@@ -125,7 +166,7 @@ def render_clip(
         "-c:a",
         "aac",
         "-b:a",
-        "192k",
+        f"{int(audio_bitrate_kbps)}k",
         "-shortest",
         "-movflags",
         "+faststart",
@@ -133,10 +174,11 @@ def render_clip(
     ]
 
     logger.info(
-        "Rendering clip encoder=%s mode=%s mix=%s out=%s cmd=%s",
+        "Rendering clip encoder=%s mode=%s mix=%s burn_subs=%s out=%s cmd=%s",
         encoder_name,
         reframe.mode,
         apply_mix,
+        burn_subtitles,
         output_path,
         " ".join(shlex.quote(part) for part in args),
     )

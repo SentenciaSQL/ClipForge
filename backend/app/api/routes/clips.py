@@ -22,6 +22,7 @@ router = APIRouter()
 
 
 def _queue_render_job(db: Session, clip: Clip, payload: RenderClipRequest) -> ProcessingJob:
+    settings = payload.model_dump()
     job = ProcessingJob(
         project_id=clip.project_id,
         video_id=clip.video_id,
@@ -30,14 +31,14 @@ def _queue_render_job(db: Session, clip: Clip, payload: RenderClipRequest) -> Pr
         status="queued",
         current_stage="queued",
         progress=0.0,
-        message="Queued for FFmpeg render",
+        message="Queued preview render" if payload.preview else "Queued for FFmpeg render",
         stages_json=[
             {"stage": "subtitle_generation", "status": "pending"},
             {"stage": "visual_analysis", "status": "pending"},
             {"stage": "rendering", "status": "pending"},
             {"stage": "export", "status": "pending"},
         ],
-        result_json={"settings": payload.model_dump()},
+        result_json={"settings": settings},
         created_at=datetime.now(timezone.utc),
     )
     db.add(job)
@@ -67,8 +68,8 @@ def patch_clip(clip_id: str, payload: PatchClipRequest, db: Session = Depends(ge
         if end <= start:
             raise HTTPException(status_code=400, detail="end_seconds must be greater than start_seconds")
         duration = end - start
-        if duration < 12 or duration > 30:
-            raise HTTPException(status_code=400, detail="Clip duration must stay between 12 and 30 seconds")
+        if duration < 1 or duration > 600:
+            raise HTTPException(status_code=400, detail="Clip duration must stay between 1 and 600 seconds")
         clip.start_seconds = start
         clip.end_seconds = end
         clip.duration_seconds = duration

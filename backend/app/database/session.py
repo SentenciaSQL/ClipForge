@@ -69,11 +69,14 @@ def init_db() -> None:
 
     if tables and "alembic_version" not in tables:
         logger.info("Existing schema detected without Alembic version; stamping head.")
+        Base.metadata.create_all(bind=engine)
         command.stamp(cfg, "head")
         return
 
     try:
         command.upgrade(cfg, "head")
+        # Ensure newly added models exist even if an older DB was stamped ahead.
+        Base.metadata.create_all(bind=engine)
     except Exception:
         # Fallback for first boot if alembic env cannot run for any reason.
         logger.exception("Alembic upgrade failed; falling back to metadata.create_all")
@@ -82,4 +85,4 @@ def init_db() -> None:
             if "alembic_version" not in inspect(engine).get_table_names():
                 conn.execute(text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"))
             conn.execute(text("DELETE FROM alembic_version"))
-            conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('20260324_0001')"))
+            conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('20261111_0002')"))

@@ -44,6 +44,10 @@ class ClipOut(ORMModel):
     reframing_mode: str
     status: str
     output_path: str | None
+    preview_path: str | None = None
+    subtitle_preset_id: str | None = None
+    render_settings: dict[str, Any] | None = None
+    audio_config: dict[str, Any] | None = None
     created_at: datetime
     updated_at: datetime
 

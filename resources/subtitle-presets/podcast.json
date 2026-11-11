@@ -1,0 +1,18 @@
+{
+  "name": "Podcast",
+  "slug": "podcast",
+  "font_family": "Inter",
+  "font_size": 56,
+  "primary_color": "#F5F5F5",
+  "highlight_color": "#7DD3FC",
+  "outline_color": "#111111",
+  "outline_width": 2,
+  "shadow": 1,
+  "position": "bottom",
+  "max_lines": 3,
+  "alignment": "center",
+  "word_highlight": false,
+  "animation_preset": "fade",
+  "uppercase": false,
+  "bold": false
+}
