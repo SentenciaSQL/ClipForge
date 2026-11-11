@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 
 _CUBLAS12 = "cublas64_12.dll"
 _applied = False
+_missing_logged = False
 
 
 def _unique_dirs(paths: list[Path]) -> list[Path]:
@@ -159,7 +160,10 @@ def ensure_cuda12_dll_path() -> dict[str, object]:
                 "cublas64_12.dll not found. Install CUDA Toolkit 12.x, or: "
                 "pip install nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cuda-nvrtc-cu12"
             )
-        logger.warning("%s", result["hint"])
+        global _missing_logged
+        if not _missing_logged:
+            logger.warning("%s", result["hint"])
+            _missing_logged = True
     elif prepended:
         logger.info("CUDA 12 DLL path ready: %s (prepended %s dirs)", cublas, len(prepended))
     else:

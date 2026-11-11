@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from app.core.logging import get_logger
 
@@ -45,6 +45,28 @@ def _resolve_mode(mode: str, *, has_faces: bool) -> str:
     return "center_crop"
 
 
+def _opencv_ready() -> Any | None:
+    """Return a usable OpenCV module, or None when face detection is unavailable."""
+    try:
+        import cv2  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("OpenCV import failed (%s); smart crop falls back to center", exc)
+        return None
+
+    # Broken installs / wrong `cv2` packages can import but miss classic APIs.
+    required = ("CascadeClassifier", "VideoCapture", "cvtColor", "data")
+    missing = [name for name in required if not hasattr(cv2, name)]
+    if missing:
+        logger.warning(
+            "OpenCV module is incomplete (missing %s). "
+            "Reinstall with: pip uninstall -y opencv-python opencv-python-headless cv2 ; "
+            "pip install opencv-python-headless==4.10.0.84. Falling back to center crop.",
+            ", ".join(missing),
+        )
+        return None
+    return cv2
+
+
 def detect_subject_x_ratio(
     video_path: Path,
     *,
@@ -53,43 +75,46 @@ def detect_subject_x_ratio(
     sample_count: int = 8,
 ) -> float | None:
     """Estimate horizontal subject position using OpenCV Haar face detection."""
+    cv2 = _opencv_ready()
+    if cv2 is None:
+        return None
+
     try:
-        import cv2  # type: ignore
-    except Exception:
-        logger.warning("OpenCV unavailable; smart crop will fall back to center")
-        return None
+        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        cascade = cv2.CascadeClassifier(cascade_path)
+        capture = cv2.VideoCapture(str(video_path))
+        if not capture.isOpened():
+            return None
+        if cascade.empty():
+            capture.release()
+            return None
 
-    capture = cv2.VideoCapture(str(video_path))
-    if not capture.isOpened():
-        return None
+        fps = capture.get(cv2.CAP_PROP_FPS) or 30.0
+        width = capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 1.0
 
-    fps = capture.get(cv2.CAP_PROP_FPS) or 30.0
-    width = capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 1.0
-    cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    if cascade.empty():
+        centers: list[float] = []
+        for index in range(sample_count):
+            t = start_seconds + (duration_seconds * (index + 0.5) / sample_count)
+            frame_idx = max(int(t * fps), 0)
+            capture.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ok, frame = capture.read()
+            if not ok or frame is None:
+                continue
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(48, 48))
+            if len(faces) == 0:
+                continue
+            # Largest face
+            x, _y, w, _h = max(faces, key=lambda item: item[2] * item[3])
+            centers.append((x + w / 2.0) / float(width))
+
         capture.release()
+        if not centers:
+            return None
+        return sum(centers) / len(centers)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Face detection failed (%s); using center crop", exc)
         return None
-
-    centers: list[float] = []
-    for index in range(sample_count):
-        t = start_seconds + (duration_seconds * (index + 0.5) / sample_count)
-        frame_idx = max(int(t * fps), 0)
-        capture.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ok, frame = capture.read()
-        if not ok or frame is None:
-            continue
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(48, 48))
-        if len(faces) == 0:
-            continue
-        # Largest face
-        x, _y, w, _h = max(faces, key=lambda item: item[2] * item[3])
-        centers.append((x + w / 2.0) / float(width))
-
-    capture.release()
-    if not centers:
-        return None
-    return sum(centers) / len(centers)
 
 
 def build_reframe_filter(
