@@ -24,6 +24,8 @@ class RenderResult:
     reframe_mode: str
     command: list[str]
     mix_applied: bool = False
+    quality_preset: str = "balanced"
+    crf_or_cq: int | None = None
 
 
 def _escape_subtitles_path(path: Path) -> str:
@@ -38,7 +40,13 @@ def choose_video_encoder(
     codec: str = "h264",
     quality_preset: str = "balanced",
     crf: int | None = None,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], int]:
+    """
+    Return (encoder_name, ffmpeg_args, effective_crf_or_cq).
+
+    NVENC CQ is not identical to x264 CRF; we only use NVENC when hardware supports it
+    and the user preference allows it. CPU libx264 often looks better at similar CQ numbers.
+    """
     settings = get_settings()
     hardware = detect_hardware()
     preference = (use_nvenc or settings.use_nvenc or "auto").lower()
@@ -47,34 +55,89 @@ def choose_video_encoder(
         want_nvenc = False
 
     quality = (quality_preset or "balanced").lower()
+    # Map named profiles → CRF/CQ + presets.
+    # Draft/fast: speed. Balanced: default. High: CRF ~18. Maximum: slow + lower CRF.
     crf_value = int(crf if crf is not None else settings.crf)
-    if quality == "fast":
-        crf_value = min(28, crf_value + 4)
+    if quality in {"draft", "fast"}:
+        crf_value = min(28, max(crf_value, 18) + 4)
         x264_preset = "veryfast"
         nvenc_preset = "p1"
+        x264_tune: list[str] = []
+    elif quality in {"maximum", "max"}:
+        crf_value = max(14, min(crf_value, 17))
+        x264_preset = "veryslow"
+        nvenc_preset = "p7"
+        x264_tune = ["-tune", "film"]
     elif quality == "high":
-        crf_value = max(14, crf_value - 2)
+        crf_value = max(15, min(crf_value, 18))
         x264_preset = "slow"
         nvenc_preset = "p6"
-    else:
+        x264_tune = []
+    else:  # balanced / custom
+        crf_value = max(16, min(crf_value, 20)) if quality == "balanced" else crf_value
         x264_preset = "medium"
         nvenc_preset = "p4"
+        x264_tune = []
 
     codec_name = (codec or "h264").lower()
-    if want_nvenc and hardware.ffmpeg_has_nvenc and hardware.cuda_available:
+    nvenc_ok = bool(hardware.ffmpeg_has_nvenc and hardware.cuda_available)
+    if want_nvenc and nvenc_ok:
         if codec_name == "h265":
             return (
                 "hevc_nvenc",
-                ["-c:v", "hevc_nvenc", "-preset", nvenc_preset, "-rc", "vbr", "-cq", str(crf_value)],
+                [
+                    "-c:v",
+                    "hevc_nvenc",
+                    "-preset",
+                    nvenc_preset,
+                    "-rc",
+                    "vbr",
+                    "-cq",
+                    str(crf_value),
+                    "-b:v",
+                    "0",
+                    "-spatial-aq",
+                    "1",
+                    "-temporal-aq",
+                    "1",
+                ],
+                crf_value,
             )
         return (
             "h264_nvenc",
-            ["-c:v", "h264_nvenc", "-preset", nvenc_preset, "-rc", "vbr", "-cq", str(crf_value)],
+            [
+                "-c:v",
+                "h264_nvenc",
+                "-preset",
+                nvenc_preset,
+                "-rc",
+                "vbr",
+                "-cq",
+                str(crf_value),
+                "-b:v",
+                "0",
+                "-spatial-aq",
+                "1",
+                "-temporal-aq",
+                "1",
+            ],
+            crf_value,
         )
 
+    if want_nvenc and not nvenc_ok:
+        logger.info("NVENC requested/auto but unavailable — using CPU encoder")
+
     if codec_name == "h265":
-        return "libx265", ["-c:v", "libx265", "-preset", x264_preset, "-crf", str(crf_value)]
-    return "libx264", ["-c:v", "libx264", "-preset", x264_preset, "-crf", str(crf_value)]
+        return (
+            "libx265",
+            ["-c:v", "libx265", "-preset", x264_preset, "-crf", str(crf_value)],
+            crf_value,
+        )
+    return (
+        "libx264",
+        ["-c:v", "libx264", "-preset", x264_preset, "-crf", str(crf_value), *x264_tune],
+        crf_value,
+    )
 
 
 def render_clip(
@@ -86,6 +149,7 @@ def render_clip(
     reframe: ReframePlan,
     ass_path: Path | None = None,
     fps: int | None = None,
+    preserve_source_fps: bool = False,
     burn_subtitles: bool = True,
     mix_plan: MixPlan | None = None,
     codec: str = "h264",
@@ -98,18 +162,19 @@ def render_clip(
     ffmpeg = get_ffmpeg()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    encoder_name, encoder_args = choose_video_encoder(
+    encoder_name, encoder_args, effective_q = choose_video_encoder(
         use_nvenc=encoder,
         codec=codec,
         quality_preset=quality_preset,
         crf=crf,
     )
-    target_fps = fps or settings.output_fps
     uses_complex_video = "[" in reframe.filter_chain or ";" in reframe.filter_chain
     apply_mix = mix_plan is not None and bool(mix_plan.filter_complex)
 
+    # Input seek before -i for fast keyframe-accurate-enough trim; single encode pass.
     args = [
         ffmpeg,
+        "-hide_banner",
         "-y",
         "-ss",
         f"{start_seconds:.3f}",
@@ -161,8 +226,6 @@ def render_clip(
     args += [
         "-pix_fmt",
         "yuv420p",
-        "-r",
-        str(target_fps),
         "-c:a",
         "aac",
         "-b:a",
@@ -170,13 +233,22 @@ def render_clip(
         "-shortest",
         "-movflags",
         "+faststart",
-        str(output_path),
     ]
 
+    # Avoid FPS interpolation unless the user requested a specific rate.
+    if preserve_source_fps or fps is None:
+        args += ["-vsync", "cfr"]
+    else:
+        args += ["-r", str(int(fps))]
+
+    args.append(str(output_path))
+
     logger.info(
-        "Rendering clip encoder=%s mode=%s mix=%s burn_subs=%s out=%s cmd=%s",
+        "Rendering clip encoder=%s q=%s mode=%s upscale=%s mix=%s burn_subs=%s out=%s cmd=%s",
         encoder_name,
+        effective_q,
         reframe.mode,
+        reframe.linear_upscale,
         apply_mix,
         burn_subtitles,
         output_path,
@@ -190,4 +262,6 @@ def render_clip(
         reframe_mode=reframe.mode,
         command=args,
         mix_applied=apply_mix,
+        quality_preset=quality_preset,
+        crf_or_cq=effective_q,
     )

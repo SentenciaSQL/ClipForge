@@ -105,6 +105,8 @@ def validate_dimensions(
     *,
     source_width: int | None = None,
     source_height: int | None = None,
+    allow_upscale: bool = False,
+    reframe_mode: str | None = None,
 ) -> dict[str, Any]:
     warnings: list[str] = []
     errors: list[str] = []
@@ -115,11 +117,31 @@ def validate_dimensions(
     if width % 2 or height % 2:
         warnings.append("Odd dimensions will be rounded to even values for yuv420p")
     if source_width and source_height:
-        if width * height > source_width * source_height * 1.05:
-            warnings.append(
+        src_short = min(source_width, source_height)
+        out_short = min(width, height)
+        pixel_upscale = (width * height) / max(1, source_width * source_height)
+        if out_short > src_short * 1.05 or pixel_upscale > 1.05:
+            msg = (
                 f"Selected output ({width}x{height}) exceeds source "
-                f"({source_width}x{source_height}); upscaling is not recommended."
+                f"({source_width}x{source_height}); upscaling does not add real detail."
             )
+            if allow_upscale:
+                warnings.append(msg + " Explicit upscaling is enabled.")
+            else:
+                warnings.append(msg + " Enable allow_upscale only if you intentionally want a larger canvas.")
+        # Crop-mode specific: effective resolution after vertical crop.
+        mode = (reframe_mode or "").lower()
+        if mode in {"smart_crop", "center_crop", "manual", "auto"} and height >= width:
+            crop_w = int(round(source_height * (width / max(1, height))))
+            if crop_w < source_width:
+                linear = width / max(1, crop_w)
+                retained = (crop_w * source_height) / max(1, source_width * source_height)
+                if retained < 0.55 or linear > 2.0:
+                    warnings.append(
+                        f"Vertical crop keeps ~{crop_w}x{source_height} from the source "
+                        f"({retained:.0%} of pixels) then scales ~{linear:.1f}×. "
+                        "Prefer Blurred Background or Fit Original for low-resolution landscape footage."
+                    )
     return {
         "ok": not errors,
         "errors": errors,
@@ -127,6 +149,7 @@ def validate_dimensions(
         "aspect_ratio": ratio_string(width, height),
         "width": _even(width),
         "height": _even(height),
+        "allow_upscale": allow_upscale,
     }
 
 

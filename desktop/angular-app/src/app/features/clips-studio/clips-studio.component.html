@@ -277,11 +277,12 @@
           <label class="text-sm block mb-3">
             <span class="avc-label">Reframe mode</span>
             <select class="avc-input mt-1" [(ngModel)]="cfg.reframe.mode" (ngModelChange)="markDirty()">
-              <option value="auto">Auto</option>
+              <option value="auto">Auto (quality-aware)</option>
               <option value="smart_crop">Smart crop</option>
               <option value="center_crop">Center crop</option>
-              <option value="blurred_bg">Fit + blurred background</option>
-              <option value="solid_bg">Fit + solid background</option>
+              <option value="blurred_bg">Blurred background</option>
+              <option value="fit_original">Fit original</option>
+              <option value="solid_bg">Solid background</option>
               <option value="original">Original frame (pad)</option>
               <option value="manual">Manual crop</option>
               <option value="gaming">Gaming / screen</option>
@@ -293,13 +294,17 @@
             <input type="checkbox" [(ngModel)]="cfg.reframe.enable_face_detection" (ngModelChange)="markDirty()" />
             <span>Enable face detection (off for gaming/tutorials)</span>
           </label>
-          <label class="text-sm block mb-3" *ngIf="cfg.reframe.mode === 'solid_bg' || cfg.reframe.mode === 'original'">
+          <label class="text-sm block mb-3" *ngIf="cfg.reframe.mode === 'solid_bg' || cfg.reframe.mode === 'original' || cfg.reframe.mode === 'fit_original'">
             <span class="avc-label">Background color</span>
             <input class="avc-input mt-1" type="color" [(ngModel)]="cfg.reframe.background_color" (ngModelChange)="markDirty()" />
           </label>
           <label class="text-sm block mb-3">
             <span class="avc-label">Focal X (0–1)</span>
             <input class="avc-input mt-1" type="number" min="0" max="1" step="0.01" [(ngModel)]="cfg.reframe.focal_x" (ngModelChange)="markDirty()" />
+          </label>
+          <label class="text-sm block mb-3">
+            <span class="avc-label">Focal Y (0–1)</span>
+            <input class="avc-input mt-1" type="number" min="0" max="1" step="0.01" [(ngModel)]="cfg.reframe.focal_y" (ngModelChange)="markDirty()" />
           </label>
           <div class="grid grid-cols-2 gap-3" *ngIf="cfg.reframe.mode === 'manual'">
             <label class="text-sm block" *ngFor="let key of manualCropKeys">
@@ -321,11 +326,21 @@
           <label class="text-sm block mb-3">
             <span class="avc-label">Quality preset</span>
             <select class="avc-input mt-1" [(ngModel)]="cfg.video.quality_preset" (ngModelChange)="markDirty()">
+              <option value="draft">Draft</option>
               <option value="fast">Fast</option>
               <option value="balanced">Balanced</option>
               <option value="high">High Quality</option>
+              <option value="maximum">Maximum Quality</option>
               <option value="custom">Custom</option>
             </select>
+          </label>
+          <label class="studio__toggle mb-3">
+            <input type="checkbox" [(ngModel)]="cfg.video.allow_upscale" (ngModelChange)="markDirty()" />
+            <span>Allow upscaling beyond source detail</span>
+          </label>
+          <label class="studio__toggle mb-3">
+            <input type="checkbox" [(ngModel)]="cfg.video.preserve_source_fps" (ngModelChange)="markDirty()" />
+            <span>Preserve source FPS (no interpolation)</span>
           </label>
           <div class="grid grid-cols-2 gap-3">
             <label class="text-sm block">
@@ -340,11 +355,11 @@
               <select class="avc-input mt-1" [(ngModel)]="cfg.video.encoder" (ngModelChange)="markDirty()">
                 <option value="auto">Auto (NVENC if available)</option>
                 <option value="nvenc">NVIDIA NVENC</option>
-                <option value="cpu">CPU</option>
+                <option value="cpu">CPU (often sharper than NVENC CQ)</option>
               </select>
             </label>
             <label class="text-sm block">
-              <span class="avc-label">CRF</span>
+              <span class="avc-label">CRF / CQ</span>
               <input class="avc-input mt-1" type="number" [(ngModel)]="cfg.video.crf" (ngModelChange)="markDirty()" />
             </label>
             <label class="text-sm block">
@@ -352,6 +367,9 @@
               <input class="avc-input mt-1" type="number" [(ngModel)]="cfg.audio.bitrate_kbps" (ngModelChange)="markDirty()" />
             </label>
           </div>
+          <p class="text-xs text-muted mt-2" *ngIf="configOut()?.validation?.warnings?.length">
+            <span *ngFor="let warn of configOut()?.validation?.warnings || []">{{ warn }} </span>
+          </p>
           <label class="text-sm block mt-3">
             <span class="avc-label">Filename pattern</span>
             <input class="avc-input mt-1" [(ngModel)]="cfg.export.filename_pattern" (ngModelChange)="markDirty()" />

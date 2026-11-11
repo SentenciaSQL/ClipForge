@@ -128,6 +128,7 @@ class GenerationConfigurationOut(BaseModel):
     configuration: GenerationConfiguration
     validation: dict[str, Any] = Field(default_factory=dict)
     summary: list[str] = Field(default_factory=list)
+    source_quality: dict[str, Any] | None = None
 
 
 class GenerationConfigurationPatch(BaseModel):

@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import {
   GenerationConfiguration,
   GenerationProfile,
+  SourceQualityAssessment,
   SourceVideo,
   SubtitlePreset,
   defaultGenerationConfiguration,
@@ -14,6 +15,7 @@ import { AiAnalysisSettingsComponent } from '../ai-analysis-settings/ai-analysis
 import { AudioGenerationSettingsComponent } from '../audio-generation-settings/audio-generation-settings.component';
 import { ClipDurationSettingsComponent } from '../clip-duration-settings/clip-duration-settings.component';
 import { GenerationConfigurationSummaryComponent } from '../generation-configuration-summary/generation-configuration-summary.component';
+import { QualitySettingsComponent } from '../quality-settings/quality-settings.component';
 import { ReframingSettingsComponent } from '../reframing-settings/reframing-settings.component';
 import { SubtitleSettingsComponent } from '../subtitle-settings/subtitle-settings.component';
 import { VideoFormatSettingsComponent } from '../video-format-settings/video-format-settings.component';
@@ -23,6 +25,7 @@ type SectionKey =
   | 'duration'
   | 'subtitles'
   | 'format'
+  | 'quality'
   | 'reframe'
   | 'ai'
   | 'audio'
@@ -38,6 +41,7 @@ type SectionKey =
     ClipDurationSettingsComponent,
     SubtitleSettingsComponent,
     VideoFormatSettingsComponent,
+    QualitySettingsComponent,
     ReframingSettingsComponent,
     AiAnalysisSettingsComponent,
     AudioGenerationSettingsComponent,
@@ -60,11 +64,12 @@ export class ClipGenerationWizardComponent implements OnChanges {
   readonly summary = signal<string[]>([]);
   readonly errors = signal<string[]>([]);
   readonly warnings = signal<string[]>([]);
+  readonly sourceQuality = signal<SourceQualityAssessment | null>(null);
   readonly message = signal<string | null>(null);
   readonly error = signal<string | null>(null);
 
   step: WizardStep = 'configure';
-  openSection: SectionKey = 'duration';
+  openSection: SectionKey = 'quality';
   selectedProfileId = '';
   newProfileName = '';
   dirty = false;
@@ -85,11 +90,16 @@ export class ClipGenerationWizardComponent implements OnChanges {
         this.summary.set(out.summary || []);
         this.errors.set((out.validation?.errors as string[]) || []);
         this.warnings.set((out.validation?.warnings as string[]) || []);
+        this.sourceQuality.set(out.source_quality || null);
         this.selectedProfileId = out.configuration.profile_id || '';
         this.dirty = false;
+        if (!out.source_quality) {
+          this.refreshSourceQuality();
+        }
       },
       error: () => {
         this.config.set(defaultGenerationConfiguration());
+        this.refreshSourceQuality();
       },
     });
     this.api.listGenerationProfiles().subscribe({
@@ -99,6 +109,36 @@ export class ClipGenerationWizardComponent implements OnChanges {
     this.api.listSubtitlePresets().subscribe({
       next: (presets) => this.subtitlePresets.set(presets),
       error: () => undefined,
+    });
+  }
+
+  refreshSourceQuality(): void {
+    const cfg = this.config();
+    this.api
+      .getSourceQuality(this.video.id, {
+        aspect_ratio: cfg.video.aspect_ratio,
+        allow_upscale: Boolean(cfg.video.allow_upscale),
+        content_hint: cfg.analysis.content_category,
+      })
+      .subscribe({
+        next: (quality) => this.sourceQuality.set(quality),
+        error: () => undefined,
+      });
+  }
+
+  applyAdaptiveRecommendation(): void {
+    this.error.set(null);
+    this.api.applyAdaptiveGenerationConfiguration(this.video.id).subscribe({
+      next: (out) => {
+        this.config.set(structuredClone(out.configuration));
+        this.summary.set(out.summary || []);
+        this.warnings.set((out.validation?.warnings as string[]) || []);
+        this.sourceQuality.set(out.source_quality || null);
+        this.message.set('Applied adaptive quality recommendation');
+        this.dirty = false;
+        this.saved.emit(out.configuration);
+      },
+      error: (err) => this.error.set(this.formatError(err) || 'Adaptive quality failed'),
     });
   }
 

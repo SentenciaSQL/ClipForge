@@ -30,6 +30,54 @@ def get_generation_configuration(video_id: str, db: Session = Depends(get_db)) -
     return gen_service.configuration_out(db, video)
 
 
+@router.get("/videos/{video_id}/source-quality")
+def get_source_quality(
+    video_id: str,
+    aspect_ratio: str = "9:16",
+    allow_upscale: bool = False,
+    content_hint: str | None = None,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Source quality assessment + adaptive render recommendations (FFprobe-based)."""
+    from app.media.ai_upscale import detect_ai_upscaler
+    from app.media.source_quality import assess_source_quality
+
+    video = get_video(db, video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    assessment = assess_source_quality(
+        path=video.stored_path,
+        width=video.width,
+        height=video.height,
+        fps=video.fps,
+        video_codec=video.video_codec,
+        audio_codec=video.audio_codec,
+        bitrate=video.bitrate,
+        aspect_key=aspect_ratio,
+        allow_upscale=allow_upscale,
+        content_hint=content_hint,
+    )
+    payload = assessment.to_dict()
+    payload["ai_upscale"] = detect_ai_upscaler().to_dict()
+    return payload
+
+
+@router.post("/videos/{video_id}/generation-configuration/apply-adaptive")
+def apply_adaptive_generation_configuration(
+    video_id: str,
+    db: Session = Depends(get_db),
+) -> GenerationConfigurationOut:
+    """Recompute canvas/reframe from source quality and persist (honors allow_upscale)."""
+    video = get_video(db, video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    config = gen_service.get_generation_configuration(video)
+    config.video.auto_quality = True
+    adapted = gen_service.apply_adaptive_quality(config, video=video, force=True)
+    gen_service.save_generation_configuration(db, video, adapted, apply_adaptive=False)
+    return gen_service.configuration_out(db, video)
+
+
 @router.put("/videos/{video_id}/generation-configuration", response_model=GenerationConfigurationOut)
 def put_generation_configuration(
     video_id: str,

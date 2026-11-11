@@ -60,10 +60,53 @@ def validate_generation_configuration(
         config.video.height,
         source_width=video.width,
         source_height=video.height,
+        allow_upscale=bool(config.video.allow_upscale),
+        reframe_mode=config.reframe.mode,
     )
     errors.extend(dim.get("errors") or [])
     warnings.extend(dim.get("warnings") or [])
     return {"ok": not errors, "errors": errors, "warnings": warnings, **dim}
+
+
+def apply_adaptive_quality(
+    config: GenerationConfiguration,
+    *,
+    video: SourceVideo,
+    force: bool = False,
+) -> GenerationConfiguration:
+    """Apply source-aware canvas/reframe recommendations when auto_quality is on."""
+    if not config.video.auto_quality and not force:
+        return config
+    from app.media.source_quality import assess_source_quality
+
+    assessment = assess_source_quality(
+        path=video.stored_path if video.stored_path else None,
+        width=video.width,
+        height=video.height,
+        fps=video.fps,
+        video_codec=video.video_codec,
+        audio_codec=video.audio_codec,
+        bitrate=video.bitrate,
+        aspect_key=config.video.aspect_ratio,
+        allow_upscale=bool(config.video.allow_upscale),
+        content_hint=config.analysis.content_category,
+    )
+    rec = assessment.recommendations or {}
+    data = config.model_dump()
+    data["video"]["width"] = int(rec.get("width") or config.video.width)
+    data["video"]["height"] = int(rec.get("height") or config.video.height)
+    label = rec.get("resolution_label") or config.video.resolution_label
+    data["video"]["resolution_label"] = label if label in {"480p", "720p", "1080p", "1440p", "2160p", "custom"} else "custom"
+    data["video"]["quality_preset"] = rec.get("quality_preset") or config.video.quality_preset
+    data["video"]["preserve_source_fps"] = True
+    data["video"]["fps"] = None
+    data["reframe"]["mode"] = rec.get("reframe_mode") or config.reframe.mode
+    if data["reframe"]["mode"] in {"blurred_bg", "original", "solid_bg", "fit_original"}:
+        data["reframe"]["enable_face_detection"] = False
+    data["video"]["auto_quality"] = config.video.auto_quality
+    data["_quality_assessment"] = assessment.to_dict()  # stripped by model_validate if unknown — keep via warnings path
+    adapted = GenerationConfiguration.model_validate({k: v for k, v in data.items() if not k.startswith("_")})
+    return adapted
 
 
 def build_summary(config: GenerationConfiguration) -> list[str]:
@@ -71,6 +114,7 @@ def build_summary(config: GenerationConfiguration) -> list[str]:
     subs = "Enabled" if config.subtitles.enabled else "Disabled"
     fps = "Preserve source" if config.video.preserve_source_fps else str(config.video.fps or 30)
     lang = config.analysis.language or "Automatic"
+    upscale = "Allowed" if config.video.allow_upscale else "Disabled"
     return [
         f"Clip duration: {config.duration.min_duration}–{config.duration.max_duration} seconds",
         f"Number of clips: {auto}",
@@ -78,6 +122,10 @@ def build_summary(config: GenerationConfiguration) -> list[str]:
         f"Subtitle style: {config.subtitles.preset_slug}",
         f"Aspect ratio: {config.video.aspect_ratio}",
         f"Resolution: {config.video.resolution_label} ({config.video.width}x{config.video.height})",
+        f"Quality preset: {config.video.quality_preset}",
+        f"Encoder: {config.video.encoder} / {config.video.codec}",
+        f"Upscaling: {upscale}",
+        f"Auto quality: {'On' if config.video.auto_quality else 'Off'}",
         f"FPS: {fps}",
         f"Reframing: {config.reframe.mode}",
         f"Audio: {config.audio.mode}",
@@ -88,7 +136,18 @@ def build_summary(config: GenerationConfiguration) -> list[str]:
     ]
 
 
-def save_generation_configuration(db: Session, video: SourceVideo, config: GenerationConfiguration) -> GenerationConfiguration:
+def save_generation_configuration(
+    db: Session,
+    video: SourceVideo,
+    config: GenerationConfiguration,
+    *,
+    apply_adaptive: bool = False,
+) -> GenerationConfiguration:
+    # Never silently overwrite user overrides on ordinary saves.
+    # Adaptive canvas/reframe is applied only when explicitly requested
+    # (apply-adaptive endpoint / first empty load) or apply_adaptive=True.
+    if apply_adaptive and config.video.auto_quality:
+        config = apply_adaptive_quality(config, video=video, force=True)
     video.generation_config_json = config.model_dump()
     video.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -97,13 +156,35 @@ def save_generation_configuration(db: Session, video: SourceVideo, config: Gener
 
 
 def configuration_out(db: Session, video: SourceVideo) -> GenerationConfigurationOut:
+    from app.media.source_quality import assess_source_quality
+
     config = get_generation_configuration(video)
+    # Fresh videos with empty config still get adaptive defaults when auto_quality is on.
+    if not video.generation_config_json and config.video.auto_quality:
+        config = apply_adaptive_quality(config, video=video)
     validation = validate_generation_configuration(config, video=video)
+    quality = assess_source_quality(
+        path=video.stored_path if video.stored_path else None,
+        width=video.width,
+        height=video.height,
+        fps=video.fps,
+        video_codec=video.video_codec,
+        audio_codec=video.audio_codec,
+        bitrate=video.bitrate,
+        aspect_key=config.video.aspect_ratio,
+        allow_upscale=bool(config.video.allow_upscale),
+        content_hint=config.analysis.content_category,
+    )
+    # Merge quality warnings into validation warnings (do not fail the request).
+    for warn in quality.warnings:
+        if warn not in (validation.get("warnings") or []):
+            validation.setdefault("warnings", []).append(warn)
     return GenerationConfigurationOut(
         video_id=video.id,
         configuration=config,
         validation=validation,
         summary=build_summary(config),
+        source_quality=quality.to_dict(),
     )
 
 
@@ -169,8 +250,18 @@ def builtin_generation_profiles() -> list[dict[str, Any]]:
             "slug": "tiktok-reels-shorts",
             "description": "Vertical 9:16 with subtitles and smart crop",
             "config_json": make(
-                video={"aspect_ratio": "9:16", "resolution_label": "1080p", "width": 1080, "height": 1920, "fps": 30},
-                reframe={"mode": "smart_crop", "enable_face_detection": True},
+                video={
+                    "aspect_ratio": "9:16",
+                    "resolution_label": "1080p",
+                    "width": 1080,
+                    "height": 1920,
+                    "fps": None,
+                    "preserve_source_fps": True,
+                    "auto_quality": True,
+                    "allow_upscale": False,
+                    "quality_preset": "high",
+                },
+                reframe={"mode": "auto", "enable_face_detection": True},
                 subtitles={"enabled": True, "preset_slug": "tiktok"},
                 analysis={"content_category": "general", "sensitivity": "medium"},
             ),
@@ -180,7 +271,15 @@ def builtin_generation_profiles() -> list[dict[str, Any]]:
             "slug": "youtube-landscape",
             "description": "16:9 landscape clips",
             "config_json": make(
-                video={"aspect_ratio": "16:9", "resolution_label": "1080p", "width": 1920, "height": 1080, "fps": 30},
+                video={
+                    "aspect_ratio": "16:9",
+                    "resolution_label": "1080p",
+                    "width": 1920,
+                    "height": 1080,
+                    "preserve_source_fps": True,
+                    "auto_quality": True,
+                    "allow_upscale": False,
+                },
                 reframe={"mode": "original", "enable_face_detection": False},
                 subtitles={"enabled": True, "preset_slug": "professional"},
             ),
@@ -190,8 +289,15 @@ def builtin_generation_profiles() -> list[dict[str, Any]]:
             "slug": "instagram-square",
             "description": "1:1 square posts",
             "config_json": make(
-                video={"aspect_ratio": "1:1", "resolution_label": "1080p", "width": 1080, "height": 1080},
-                reframe={"mode": "center_crop"},
+                video={
+                    "aspect_ratio": "1:1",
+                    "resolution_label": "1080p",
+                    "width": 1080,
+                    "height": 1080,
+                    "auto_quality": True,
+                    "allow_upscale": False,
+                },
+                reframe={"mode": "auto"},
                 subtitles={"enabled": True, "preset_slug": "minimal"},
             ),
         },
@@ -200,7 +306,7 @@ def builtin_generation_profiles() -> list[dict[str, Any]]:
             "slug": "podcast-clips",
             "description": "Talking-head podcast vertical clips",
             "config_json": make(
-                video={"aspect_ratio": "9:16", "resolution_label": "1080p"},
+                video={"aspect_ratio": "9:16", "resolution_label": "1080p", "auto_quality": True, "allow_upscale": False},
                 reframe={"mode": "podcast", "enable_face_detection": True},
                 subtitles={"enabled": True, "preset_slug": "podcast"},
                 analysis={"content_category": "podcast", "sensitivity": "high"},
@@ -212,7 +318,7 @@ def builtin_generation_profiles() -> list[dict[str, Any]]:
             "slug": "gaming-clips",
             "description": "Screen content with blurred sides, no face tracking",
             "config_json": make(
-                video={"aspect_ratio": "9:16", "resolution_label": "1080p"},
+                video={"aspect_ratio": "9:16", "resolution_label": "1080p", "auto_quality": True, "allow_upscale": False},
                 reframe={"mode": "gaming", "enable_face_detection": False},
                 subtitles={"enabled": True, "preset_slug": "gaming"},
                 analysis={"content_category": "gaming", "sensitivity": "medium"},

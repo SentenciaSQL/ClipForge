@@ -75,13 +75,24 @@
       />
     </details>
 
+    <details class="section" [open]="isOpen('quality')" (toggle)="openSection = 'quality'">
+      <summary>Quality &amp; adaptive rendering</summary>
+      <app-quality-settings
+        [config]="config().video"
+        [sourceQuality]="sourceQuality()"
+        [warnings]="warnings()"
+        (configChange)="patchConfig({ video: $event }); refreshSourceQuality()"
+        (applyAdaptive)="applyAdaptiveRecommendation()"
+      />
+    </details>
+
     <details class="section" [open]="isOpen('format')" (toggle)="openSection = 'format'">
       <summary>C–D. Video frame, resolution &amp; FPS</summary>
       <app-video-format-settings
         [config]="config().video"
         [sourceWidth]="video.width"
         [sourceHeight]="video.height"
-        (configChange)="patchConfig({ video: $event })"
+        (configChange)="patchConfig({ video: $event }); refreshSourceQuality()"
       />
     </details>
 

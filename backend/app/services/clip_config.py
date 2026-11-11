@@ -109,6 +109,8 @@ def configuration_out(db: Session, clip: Clip) -> ClipConfigurationOut:
         cfg.video.height,
         source_width=video.width if video else None,
         source_height=video.height if video else None,
+        allow_upscale=bool(getattr(cfg.video, "allow_upscale", False)),
+        reframe_mode=cfg.reframe.mode,
     )
     fps = cfg.video.fps or int(round(video.fps or 30)) if video else (cfg.video.fps or 30)
     if cfg.video.preserve_source_fps and video and video.fps:
