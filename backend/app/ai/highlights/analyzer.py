@@ -23,6 +23,7 @@ Rules:
 - Propose moments with strong hooks that make sense independently.
 - Avoid starting mid-sentence or ending before an idea completes.
 - Prefer complete ideas: stories, advice, educational explanations, controversy, emotion, humor, revelations, Q&A, conclusions, memorable statements.
+- category MUST be one of: hook, story, advice, educational, controversial, emotional, funny, revelation, qa, conclusion, memorable, general.
 - Candidate duration should target 12 to 30 seconds.
 - Use timestamps that refer to the absolute times provided in the transcript window.
 - Scores are 0-100 estimates of engagement potential, not guaranteed virality.
@@ -180,9 +181,23 @@ class HighlightAnalyzer:
         )
         if isinstance(payload, list):
             payload = {"candidates": payload}
-        batch = HighlightProposalBatch.model_validate(payload)
+        raw_items = payload.get("candidates") if isinstance(payload, dict) else None
+        if not isinstance(raw_items, list):
+            # Fall back to strict batch parse for odd shapes.
+            try:
+                batch = HighlightProposalBatch.model_validate(payload)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Ignoring invalid highlight payload for chunk %s: %s", chunk.index, exc)
+                return []
+            raw_items = [item.model_dump() for item in batch.candidates]
+
         valid: list[HighlightProposal] = []
-        for item in batch.candidates:
+        for raw in raw_items:
+            try:
+                item = HighlightProposal.model_validate(raw)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Skipping invalid highlight candidate in chunk %s: %s", chunk.index, exc)
+                continue
             duration = item.end_seconds - item.start_seconds
             # Keep slightly outside range; boundary snap will fix when possible.
             if duration < 8 or duration > 45:
