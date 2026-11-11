@@ -83,4 +83,8 @@ Write-Host "Creating workspace folders..." -ForegroundColor Cyan
 }
 
 Write-Host "Setup complete." -ForegroundColor Green
-Write-Host "Next: .\scripts\Start-Dev.ps1"
+Write-Host "Next (if ExecutionPolicy blocks scripts):" -ForegroundColor Yellow
+Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\Start-Dev.ps1"
+Write-Host "Or allow local scripts once:" -ForegroundColor Yellow
+Write-Host "  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned"
+Write-Host "Then: .\scripts\Start-Dev.ps1"

@@ -35,36 +35,92 @@ ClipForge/
 | Ollama | Local LLM (`qwen3:8b` recommended) |
 | NVIDIA CUDA | Optional; CPU fallback supported |
 
-Copy `.env.example` → `.env` before first run.
-
 ---
 
 ## Commands (Windows PowerShell)
 
-Run from the repo root:
+Run everything from the repo root unless a command says otherwise:
 
 ```powershell
 cd C:\Users\PC\Documents\python\ClipForge
 ```
 
-### 1) Verify toolchain
+### 0) PowerShell execution policy (required once)
+
+Windows often blocks unsigned scripts (`Start-Dev.ps1`, `Setup-Dev.ps1`, …) with:
+
+`cannot be loaded. The file is not digitally signed`
+
+**Option A — allow your user to run local scripts (recommended, once):**
 
 ```powershell
-.\scripts\Verify-Environment.ps1
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-### 2) One-time setup
+Close and reopen PowerShell, then use `.\scripts\...` normally.
+
+**Option B — run one script without changing policy:**
 
 ```powershell
-.\scripts\Setup-Dev.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\Verify-Environment.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Dev.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\Start-Dev.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\Build-Release.ps1
 ```
 
-Creates the backend venv, installs Python deps, and prepares the Angular app (`npm install`).
+**Option C — skip scripts entirely** and use the [manual commands](#manual-start-no-scripts) below.
 
-### 3) Development mode (browser + API)
+### 1) Environment file (`.env`)
 
 ```powershell
-.\scripts\Start-Dev.ps1
+cd C:\Users\PC\Documents\python\ClipForge
+
+# Create .env if missing (Setup-Dev.ps1 also does this)
+if (-not (Test-Path .\.env)) { Copy-Item .\.env.example .\.env }
+
+# Optional: open it in Notepad
+notepad .\.env
+```
+
+Important variables (see `.env.example`):
+
+| Variable | Typical value | Notes |
+|----------|---------------|--------|
+| `AVC_HOST` / `AVC_PORT` | `127.0.0.1` / `8000` | Backend bind |
+| `AVC_WORKSPACE_PATH` | `./workspace` | Local media + DB |
+| `AVC_CORS_ORIGINS` | `http://127.0.0.1:4200,...` | Angular / Tauri |
+| `AVC_FFMPEG_PATH` / `AVC_FFPROBE_PATH` | empty or full `.exe` paths | Leave empty if on PATH |
+| `AVC_OLLAMA_URL` / `AVC_OLLAMA_MODEL` | `http://127.0.0.1:11434` / `qwen3:8b` | Local LLM |
+| `AVC_WHISPER_MODEL` / `AVC_WHISPER_DEVICE` | e.g. `small` / `auto` | Use `cpu` if CUDA fails |
+| `AVC_HF_TOKEN` | optional | Only for pyannote diarization |
+
+### 2) Verify toolchain
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Verify-Environment.ps1
+```
+
+### 3) One-time setup
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Dev.ps1
+```
+
+Creates `.env` (if needed), `backend\.venv`, installs Python deps, and runs `npm install` for Angular.
+
+Then apply DB migrations:
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+alembic upgrade head
+cd ..
+```
+
+### 4) Development mode (browser + API)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Start-Dev.ps1
 ```
 
 | Service | URL |
@@ -81,13 +137,45 @@ Pull Ollama model once (if using highlights):
 ollama pull qwen3:8b
 ```
 
-### 4) Desktop release build (installer)
+### Manual start (no scripts)
+
+Use two PowerShell windows. No execution-policy change needed for these commands.
+
+**Terminal 1 — backend**
+
+```powershell
+cd C:\Users\PC\Documents\python\ClipForge
+
+if (-not (Test-Path .\.env)) { Copy-Item .\.env.example .\.env }
+
+cd backend
+py -3.12 -m venv .venv   # only if .venv does not exist yet
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements-core.txt
+pip install -r requirements.txt
+alembic upgrade head
+python main.py
+# equivalent: uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+**Terminal 2 — Angular**
+
+```powershell
+cd C:\Users\PC\Documents\python\ClipForge\desktop\angular-app
+npm install   # first time only
+npm start
+```
+
+Then open http://127.0.0.1:4200
+
+### 5) Desktop release build (installer)
 
 Use a **normal** PowerShell window (not Administrator):
 
 ```powershell
 git pull
-.\scripts\Build-Release.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\Build-Release.ps1
 ```
 
 What it builds:
@@ -195,9 +283,14 @@ Restart the backend afterward. ClipForge prepends the pip package `bin` folders 
 ## Environment tips
 
 ```powershell
-# Activate backend venv manually
-cd backend
-.\.venv\Scripts\activate
+# Activate backend venv (if Activate.ps1 is blocked, use Bypass once)
+cd C:\Users\PC\Documents\python\ClipForge\backend
+powershell -ExecutionPolicy Bypass -File .\.venv\Scripts\Activate.ps1
+# or, after RemoteSigned for CurrentUser:
+# .\.venv\Scripts\Activate.ps1
+
+# Confirm env file is loaded from repo root
+Get-Content ..\.env | Select-Object -First 20
 
 # Run API alone
 python main.py
@@ -205,6 +298,14 @@ python main.py
 # Run Angular alone
 cd ..\desktop\angular-app
 npm start
+```
+
+If `Activate.ps1` is blocked and you do not want to change policy, call the venv Python directly:
+
+```powershell
+cd C:\Users\PC\Documents\python\ClipForge\backend
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe main.py
 ```
 
 Workspace paths (created automatically):

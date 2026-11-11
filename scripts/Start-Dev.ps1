@@ -2,13 +2,30 @@
 <#
 .SYNOPSIS
   Start FastAPI backend and Angular dev server in separate PowerShell windows.
+
+.NOTES
+  If Windows blocks this file (not digitally signed), run:
+    powershell -ExecutionPolicy Bypass -File .\scripts\Start-Dev.ps1
+  Or once per user:
+    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 #>
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 
+$envFile = Join-Path $Root ".env"
+if (-not (Test-Path $envFile)) {
+  $example = Join-Path $Root ".env.example"
+  if (Test-Path $example) {
+    Copy-Item $example $envFile
+    Write-Host "Created .env from .env.example" -ForegroundColor Yellow
+  } else {
+    Write-Host "Warning: .env missing and .env.example not found." -ForegroundColor Yellow
+  }
+}
+
 $venvPython = Join-Path $Root "backend\.venv\Scripts\python.exe"
 if (-not (Test-Path $venvPython)) {
-  throw "Virtual environment missing. Run .\scripts\Setup-Dev.ps1 first."
+  throw "Virtual environment missing. Run: powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Dev.ps1"
 }
 
 $backendCmd = @"

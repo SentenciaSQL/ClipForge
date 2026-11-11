@@ -11,7 +11,24 @@ Todas las capturas se tomaron de la UI real.
 
 ```powershell
 cd C:\Users\PC\Documents\python\ClipForge
-.\scripts\Start-Dev.ps1
+
+# Si falla por "not digitally signed", usa Bypass o cambia la política:
+# Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+powershell -ExecutionPolicy Bypass -File .\scripts\Start-Dev.ps1
+```
+
+Sin scripts (dos terminales):
+
+```powershell
+# Terminal 1
+cd C:\Users\PC\Documents\python\ClipForge
+if (-not (Test-Path .\.env)) { Copy-Item .\.env.example .\.env }
+cd backend
+.\.venv\Scripts\python.exe main.py
+
+# Terminal 2
+cd C:\Users\PC\Documents\python\ClipForge\desktop\angular-app
+npm start
 ```
 
 - UI: http://127.0.0.1:4200  
@@ -20,7 +37,7 @@ cd C:\Users\PC\Documents\python\ClipForge
 ### Modo desktop (instalador)
 
 ```powershell
-.\scripts\Build-Release.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\Build-Release.ps1
 explorer .\desktop\angular-app\src-tauri\target\release\bundle\nsis
 ```
 
