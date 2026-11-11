@@ -6,6 +6,7 @@ from typing import Any
 
 from app.ai.highlights.boundaries import snap_window
 from app.ai.highlights.dedupe import RankedCandidate, select_distinct_candidates
+from app.ai.highlights.heuristic import build_heuristic_candidates
 from app.ai.highlights.schemas import HighlightProposal, HighlightProposalBatch
 from app.ai.llm.chunking import TranscriptChunk, chunk_segments
 from app.ai.llm.ollama_client import OllamaClient, OllamaError, ollama_client
@@ -23,8 +24,10 @@ Rules:
 - Propose moments with strong hooks that make sense independently.
 - Avoid starting mid-sentence or ending before an idea completes.
 - Prefer complete ideas: stories, advice, educational explanations, controversy, emotion, humor, revelations, Q&A, conclusions, memorable statements.
+- Also work for trailers, cinematic dialogue, ads, and sparse speech: pick the most striking lines and expand to 12–30s windows.
+- Always propose at least 1 candidate when the window has any spoken dialogue, unless there is truly no usable speech.
 - category MUST be one of: hook, story, advice, educational, controversial, emotional, funny, revelation, qa, conclusion, memorable, general.
-- Candidate duration should target 12 to 30 seconds.
+- Candidate duration should target 12 to 30 seconds (wall-clock, silence between lines is OK).
 - Use timestamps that refer to the absolute times provided in the transcript window.
 - Scores are 0-100 estimates of engagement potential, not guaranteed virality.
 """
@@ -45,7 +48,10 @@ def _user_prompt(chunk: TranscriptChunk, min_seconds: int, max_seconds: int) -> 
         '"description":"","reason":"","hook_strength":0,"content_value":0,'
         '"emotional_engagement":0,"message_clarity":0,"segment_independence":0,"ending_quality":0}]}'
     )
-    lines.append("Return 0-5 candidates for this window. Empty candidates array is allowed.")
+    lines.append(
+        "Return 1-5 candidates for this window when speech exists. "
+        "Only return an empty candidates array if there is no spoken dialogue."
+    )
     return "\n".join(lines)
 
 
@@ -119,9 +125,10 @@ class HighlightAnalyzer:
                     min_seconds=float(effective_min),
                     max_seconds=float(effective_max),
                     video_duration=video_duration,
+                    min_words=5,
                 )
                 if not snapped:
-                    logger.debug(
+                    logger.info(
                         "Rejected proposal outside transcript bounds: %.2f-%.2f",
                         proposal.start_seconds,
                         proposal.end_seconds,
@@ -157,6 +164,18 @@ class HighlightAnalyzer:
                 )
 
         selected = select_distinct_candidates(raw_candidates, max_count=max(1, clip_count))
+        if not selected:
+            logger.warning(
+                "Ollama produced 0 usable clips (raw=%s); running transcript heuristic fallback",
+                len(raw_candidates),
+            )
+            selected = build_heuristic_candidates(
+                segments,
+                clip_count=clip_count,
+                min_seconds=float(effective_min),
+                max_seconds=float(effective_max),
+                video_duration=video_duration,
+            )
         logger.info(
             "Highlight analysis produced %s raw / %s selected candidates using %s",
             len(raw_candidates),
@@ -199,8 +218,8 @@ class HighlightAnalyzer:
                 logger.warning("Skipping invalid highlight candidate in chunk %s: %s", chunk.index, exc)
                 continue
             duration = item.end_seconds - item.start_seconds
-            # Keep slightly outside range; boundary snap will fix when possible.
-            if duration < 8 or duration > 45:
+            # Allow short seeds; snap_window expands into the 12–30s target range.
+            if duration < 2 or duration > 60:
                 continue
             # Must intersect the current chunk window.
             if item.end_seconds < chunk.start_seconds or item.start_seconds > chunk.end_seconds:
