@@ -22,20 +22,35 @@ def snap_window(
     min_seconds: float = 12.0,
     max_seconds: float = 30.0,
     video_duration: float | None = None,
-    min_words: int = 5,
+    min_words: int = 0,
 ) -> tuple[float, float, str] | None:
     """
     Validate and adjust a proposed window against transcript segments.
 
     - Prefer complete segment boundaries
     - Expand/shrink into [min_seconds, max_seconds]
-    - Reject windows that cannot cover real transcript content
+    - Words are optional (music / rhythm / external audio are valid clips)
 
     For sparse dialogue (trailers, ads), expansion may span silence between lines
     so wall-clock duration reaches min_seconds even when speech is short.
     """
     if not segments:
-        return None
+        # Pure duration clamp when there are no transcript anchors.
+        if video_duration is None or video_duration <= 0:
+            return None
+        start = max(0.0, float(start))
+        end = max(start + 0.1, float(end))
+        if end - start < min_seconds:
+            end = min(video_duration, start + min_seconds)
+            if end - start < min_seconds:
+                start = max(0.0, end - min_seconds)
+        if end - start > max_seconds:
+            end = start + max_seconds
+        end = min(video_duration, end)
+        duration = end - start
+        if duration < min(min_seconds, video_duration) - 0.25:
+            return None
+        return start, end, ""
 
     ordered = sorted(segments, key=lambda s: float(s.get("start", 0)))
     max_end = video_duration if video_duration is not None else float(ordered[-1].get("end", end))
@@ -113,7 +128,8 @@ def snap_window(
         return None
 
     text = _segment_text(ordered, snapped_start, snapped_end)
-    words = [w for w in text.split() if w]
-    if len(words) < max(1, min_words):
-        return None
+    if min_words > 0:
+        words = [w for w in text.split() if w]
+        if len(words) < min_words:
+            return None
     return snapped_start, snapped_end, text

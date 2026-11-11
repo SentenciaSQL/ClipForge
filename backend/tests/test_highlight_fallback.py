@@ -1,13 +1,12 @@
-"""Regression: sparse trailer dialogue should still yield clips."""
+"""Regression: clips must work without mandatory spoken words."""
 
 from __future__ import annotations
 
 from app.ai.highlights.boundaries import snap_window
-from app.ai.highlights.heuristic import build_heuristic_candidates
+from app.ai.highlights.heuristic import build_duration_windows, build_heuristic_candidates
 
 
 def _sparse_trailer_segments() -> list[dict]:
-    # Mimics a cinematic trailer: short lines with gaps, ~167s total.
     return [
         {"id": 0, "start": 9.7, "end": 11.0, "text": "What you doing out there?"},
         {"id": 1, "start": 18.2, "end": 20.1, "text": "You gotta be careful."},
@@ -30,12 +29,28 @@ def test_snap_pads_sparse_dialogue_to_min_duration():
         min_seconds=12.0,
         max_seconds=30.0,
         video_duration=166.79,
-        min_words=3,
+        min_words=0,
     )
     assert snapped is not None
     start, end, text = snapped
     assert end - start >= 11.75
     assert "What you doing" in text
+
+
+def test_snap_allows_empty_transcript_with_duration_only():
+    snapped = snap_window(
+        [],
+        10.0,
+        20.0,
+        min_seconds=12.0,
+        max_seconds=30.0,
+        video_duration=90.0,
+        min_words=0,
+    )
+    assert snapped is not None
+    start, end, text = snapped
+    assert text == ""
+    assert end - start >= 11.75
 
 
 def test_heuristic_fallback_selects_clips_for_trailer():
@@ -48,4 +63,28 @@ def test_heuristic_fallback_selects_clips_for_trailer():
     )
     assert len(selected) >= 1
     assert all(12.0 - 0.3 <= c.duration_seconds <= 30.5 for c in selected)
-    assert all(c.transcript.strip() for c in selected)
+
+
+def test_duration_windows_for_music_without_speech():
+    selected = build_duration_windows(
+        video_duration=166.79,
+        clip_count=4,
+        min_seconds=12.0,
+        max_seconds=30.0,
+    )
+    assert len(selected) >= 1
+    assert all(c.transcript == "" for c in selected)
+    assert all(c.hook for c in selected)
+    assert all(12.0 - 0.3 <= c.duration_seconds <= 30.5 for c in selected)
+
+
+def test_heuristic_falls_back_to_duration_when_no_segments():
+    selected = build_heuristic_candidates(
+        [],
+        clip_count=3,
+        min_seconds=12.0,
+        max_seconds=30.0,
+        video_duration=120.0,
+    )
+    assert len(selected) >= 1
+    assert all(c.transcript == "" for c in selected)
