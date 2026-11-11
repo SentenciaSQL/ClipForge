@@ -6,9 +6,11 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     audio,
+    clip_config,
     clips,
     dashboard,
     diarization,
+    export_profiles,
     health,
     highlights,
     jobs,
@@ -29,6 +31,8 @@ api_router.include_router(videos.router, tags=["videos"])
 api_router.include_router(transcriptions.router, tags=["transcriptions"])
 api_router.include_router(highlights.router, tags=["highlights"])
 api_router.include_router(clips.router, tags=["clips"])
+api_router.include_router(clip_config.router, tags=["clip-configuration"])
+api_router.include_router(export_profiles.router, tags=["export-profiles"])
 api_router.include_router(audio.router, tags=["audio"])
 api_router.include_router(waveforms.router, tags=["waveforms"])
 api_router.include_router(diarization.router, tags=["diarization"])

@@ -135,6 +135,10 @@ def clip_to_out(row: Clip) -> ClipOut:
         reframing_mode=row.reframing_mode,
         status=row.status,
         output_path=row.output_path,
+        preview_path=row.preview_path,
+        subtitle_preset_id=row.subtitle_preset_id,
+        render_settings=row.render_settings,
+        audio_config=row.audio_config,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

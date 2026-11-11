@@ -98,17 +98,20 @@ No es obligatorio si solo hay un narrador.
 
 ---
 
-## 6. Clips Studio (revisar y render)
+## 6. Clips Studio (personalizar y exportar)
 
 ![Clips Studio](user-guide/05-clips-studio.png)
 
-1. Elige el video fuente  
-2. Revisa candidatos (score, hook, tiempos, transcript)  
-3. Elige modo de reframe (Automatic / smart crop / center / blurred)  
-4. Pulsa **Render 9:16**  
+1. Elige el video fuente y un clip  
+2. Ajusta por clip (sin re-transcribir):
+   - **Subtitles** ON/OFF + preset / tipografía / posición  
+   - **Frame**: 9:16, 1:1, 16:9, 4:3, 4:5, 21:9 o custom + resolución/FPS  
+   - **Reframe**: smart/center/blur/solid/original/manual  
+   - **Export**: codec, calidad, NVENC/CPU, nombre de archivo  
+3. **Save config** → **Preview render** → **Export MP4**  
+4. Opcional: aplica la config a varios clips seleccionados o usa **Profiles** (TikTok, Reels, Shorts, etc.)
 
-El MP4 vertical (1080×1920) queda en `workspace\exports\...`.  
-Puedes **Copy output path** para abrirlo en el explorador.
+Los MP4 quedan en `workspace\exports\...` (o la carpeta que configures).
 
 ---
 

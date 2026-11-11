@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -16,7 +17,9 @@ from app.database.models import Clip, SourceVideo, SubtitlePreset, Transcription
 from app.media.reframe import plan_reframe_for_clip
 from app.media.renderer import render_clip
 from app.media.subtitles.ass_generator import build_ass_for_clip, write_ass_file
+from app.schemas.clip_config import ClipConfiguration
 from app.services.audio_studio import build_mix_plan_for_clip, ensure_original_track, get_mix_settings
+from app.services.clip_config import get_clip_configuration, style_dict_from_config
 from app.services.transcriptions import get_latest_transcription
 from app.storage.paths import video_temp_dir
 
@@ -32,7 +35,6 @@ def _load_preset(db: Session, clip: Clip, slug: str | None = None) -> dict[str, 
     preset = db.scalar(select(SubtitlePreset).where(SubtitlePreset.slug == target))
     if preset:
         return dict(preset.config_json)
-    # Fallback to file on disk
     path = Path(__file__).resolve().parents[3] / "resources" / "subtitle-presets" / f"{target}.json"
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
@@ -55,10 +57,56 @@ def _words_for_clip(transcription: Transcription | None) -> list[dict[str, Any]]
             )
     if words:
         return words
-    # Fallback from relationship if loaded
     for word in getattr(transcription, "words", []) or []:
         words.append({"word": word.word, "start": word.start, "end": word.end, "confidence": word.confidence})
     return words
+
+
+def _words_from_segments(segments: list[dict[str, Any]], *, clip_start: float) -> list[dict[str, Any]]:
+    """Convert edited subtitle segments into word-like entries for ASS generation."""
+    words: list[dict[str, Any]] = []
+    for seg in segments:
+        text = str(seg.get("text") or "").strip()
+        if not text:
+            continue
+        start = float(seg.get("start", 0)) + clip_start
+        end = float(seg.get("end", start + 1)) + clip_start
+        tokens = text.split()
+        if not tokens:
+            continue
+        span = max(end - start, 0.05)
+        step = span / len(tokens)
+        for index, token in enumerate(tokens):
+            words.append(
+                {
+                    "word": token,
+                    "start": start + index * step,
+                    "end": start + (index + 1) * step,
+                    "confidence": 1.0,
+                }
+            )
+    return words
+
+
+def _format_filename(pattern: str, clip: Clip) -> str:
+    title = re.sub(r"[^\w\-]+", "_", (clip.title or clip.hook or "clip").strip())[:40] or "clip"
+    values = {
+        "title": title,
+        "id": clip.id,
+        "id8": clip.id[:8],
+        "category": (clip.category or "general"),
+        "score": str(int(clip.score or 0)),
+    }
+    name = pattern or "{title}_{id8}"
+    try:
+        name = name.format(**values)
+    except Exception:
+        name = f"{values['title']}_{values['id8']}"
+    for ch in '<>:"/\\|?*':
+        name = name.replace(ch, "_")
+    if not name.lower().endswith(".mp4"):
+        name += ".mp4"
+    return name
 
 
 def render_clip_asset(
@@ -67,8 +115,10 @@ def render_clip_asset(
     *,
     reframing_mode: str | None = None,
     subtitle_preset: str | None = None,
-    burn_subtitles: bool = True,
+    burn_subtitles: bool | None = None,
     output_name: str | None = None,
+    configuration: ClipConfiguration | None = None,
+    preview: bool = False,
 ) -> Clip:
     clip = db.get(Clip, clip_id)
     if not clip:
@@ -80,24 +130,49 @@ def render_clip_asset(
     if not source.exists():
         raise FileNotFoundError(f"Source file missing: {source}")
 
-    settings = get_settings()
-    mode = reframing_mode or clip.reframing_mode or "auto"
-    preset = _load_preset(db, clip, subtitle_preset)
-    transcription = get_latest_transcription(db, video.id)
-    words = _words_for_clip(transcription)
+    cfg = configuration or get_clip_configuration(db, clip)
+    if reframing_mode:
+        cfg.reframe.mode = reframing_mode  # type: ignore[assignment]
+    if subtitle_preset:
+        cfg.subtitles.preset_slug = subtitle_preset
+    if burn_subtitles is not None:
+        cfg.subtitles.enabled = bool(burn_subtitles)
 
-    temp_dir = video_temp_dir(video.id) / "renders" / clip.id
+    # Preview uses faster quality unless custom is explicit.
+    quality = "fast" if preview and cfg.video.quality_preset == "balanced" else cfg.video.quality_preset
+
+    preset_file = _load_preset(db, clip, cfg.subtitles.preset_slug)
+    style = style_dict_from_config(cfg)
+    # Style overrides win; keep unknown keys from file preset as fallback.
+    preset = {**preset_file, **style}
+
+    transcription = get_latest_transcription(db, video.id)
+    if cfg.subtitles.segments:
+        words = _words_from_segments(
+            [s.model_dump() for s in cfg.subtitles.segments],
+            clip_start=float(clip.start_seconds),
+        )
+    else:
+        words = _words_for_clip(transcription)
+
+    temp_dir = video_temp_dir(video.id) / ("previews" if preview else "renders") / clip.id
     temp_dir.mkdir(parents=True, exist_ok=True)
     ass_path = temp_dir / "subtitles.ass"
-    ass_doc = build_ass_for_clip(
-        words,
-        clip_start=float(clip.start_seconds),
-        clip_end=float(clip.end_seconds),
-        preset=preset,
-        play_res_x=settings.output_width,
-        play_res_y=settings.output_height,
-    )
-    write_ass_file(ass_path, ass_doc)
+    burn = bool(cfg.subtitles.enabled)
+    if burn:
+        ass_doc = build_ass_for_clip(
+            words,
+            clip_start=float(clip.start_seconds),
+            clip_end=float(clip.end_seconds),
+            preset=preset,
+            play_res_x=cfg.video.width,
+            play_res_y=cfg.video.height,
+        )
+        write_ass_file(ass_path, ass_doc)
+
+    enable_faces = bool(cfg.reframe.enable_face_detection)
+    if cfg.reframe.mode in {"gaming", "tutorial", "educational"}:
+        enable_faces = False
 
     reframe = plan_reframe_for_clip(
         source,
@@ -105,19 +180,27 @@ def render_clip_asset(
         duration_seconds=float(clip.duration_seconds),
         source_width=video.width,
         source_height=video.height,
-        output_width=settings.output_width,
-        output_height=settings.output_height,
-        mode=mode,
+        output_width=cfg.video.width,
+        output_height=cfg.video.height,
+        mode=cfg.reframe.mode,
+        background_color=cfg.reframe.background_color,
+        focal_x=cfg.reframe.focal_x,
+        manual_crop=cfg.reframe.manual_crop.model_dump() if cfg.reframe.manual_crop else None,
+        enable_face_detection=enable_faces,
     )
 
-    safe_name = output_name or f"{clip.id[:8]}_{(clip.title or 'clip').replace(' ', '_')[:40]}.mp4"
-    for ch in '<>:"/\\|?*':
-        safe_name = safe_name.replace(ch, "_")
-    if not safe_name.lower().endswith(".mp4"):
-        safe_name += ".mp4"
-    export_dir = settings.exports_dir / clip.project_id
-    export_dir.mkdir(parents=True, exist_ok=True)
-    output_path = export_dir / safe_name
+    fps = cfg.video.fps
+    if cfg.video.preserve_source_fps and video.fps:
+        fps = int(round(float(video.fps)))
+
+    if preview:
+        output_path = temp_dir / "preview.mp4"
+    else:
+        settings = get_settings()
+        safe_name = output_name or _format_filename(cfg.export.filename_pattern, clip)
+        export_root = Path(cfg.export.output_directory) if cfg.export.output_directory else (settings.exports_dir / clip.project_id)
+        export_root.mkdir(parents=True, exist_ok=True)
+        output_path = export_root / safe_name
 
     ensure_original_track(db, clip)
     mix_plan = build_mix_plan_for_clip(db, clip)
@@ -129,33 +212,39 @@ def render_clip_asset(
         start_seconds=float(clip.start_seconds),
         duration_seconds=float(clip.duration_seconds),
         reframe=reframe,
-        ass_path=ass_path if burn_subtitles else None,
-        burn_subtitles=burn_subtitles,
+        ass_path=ass_path if burn else None,
+        burn_subtitles=burn,
         mix_plan=mix_plan,
+        fps=fps,
+        codec=cfg.video.codec,
+        encoder=cfg.video.encoder,
+        quality_preset=quality,
+        crf=cfg.video.crf,
+        audio_bitrate_kbps=cfg.audio.bitrate_kbps,
     )
 
-    clip.output_path = str(result.output_path)
-    clip.ass_path = str(ass_path)
-    clip.preview_path = str(result.output_path)
+    clip.ass_path = str(ass_path) if burn else None
     clip.reframing_mode = reframe.mode
-    clip.status = "rendered"
     clip.render_settings = {
-        **(clip.render_settings or {}),
+        **cfg.model_dump(),
         "encoder": result.encoder,
-        "reframe": reframe.mode,
         "reframe_notes": reframe.notes,
-        "burn_subtitles": burn_subtitles,
-        "subtitle_preset": preset.get("slug") or preset.get("name"),
-        "output_width": settings.output_width,
-        "output_height": settings.output_height,
         "audio_mix": True,
         "loudnorm": mix_settings.enable_loudnorm,
         "limiter": mix_settings.enable_limiter,
         "audio_preset": mix_settings.preset_slug,
+        "preview": preview,
     }
+    if preview:
+        clip.preview_path = str(result.output_path)
+        clip.status = "preview_ready"
+    else:
+        clip.output_path = str(result.output_path)
+        clip.preview_path = str(result.output_path)
+        clip.status = "rendered"
     db.commit()
     db.refresh(clip)
-    logger.info("Rendered clip %s → %s", clip.id, clip.output_path)
+    logger.info("%s clip %s → %s", "Previewed" if preview else "Rendered", clip.id, result.output_path)
     return clip
 
 

@@ -1,0 +1,18 @@
+{
+  "name": "Gaming",
+  "slug": "gaming",
+  "font_family": "Montserrat",
+  "font_size": 68,
+  "primary_color": "#FFFFFF",
+  "highlight_color": "#00FF9C",
+  "outline_color": "#000000",
+  "outline_width": 4,
+  "shadow": 3,
+  "position": "bottom",
+  "max_lines": 2,
+  "alignment": "center",
+  "word_highlight": true,
+  "animation_preset": "pop",
+  "uppercase": false,
+  "bold": true
+}

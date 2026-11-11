@@ -8,7 +8,9 @@ from pydantic import BaseModel, Field
 class RenderClipRequest(BaseModel):
     reframing_mode: str | None = None
     subtitle_preset: str | None = None
-    burn_subtitles: bool = True
+    burn_subtitles: bool | None = None
+    preview: bool = False
+    configuration: dict | None = None
 
 
 class ExportClipsRequest(BaseModel):
@@ -23,3 +25,4 @@ class PatchClipRequest(BaseModel):
     reframing_mode: str | None = None
     subtitle_preset_id: str | None = None
     status: str | None = None
+    render_settings: dict | None = None
