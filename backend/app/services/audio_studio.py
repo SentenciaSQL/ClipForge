@@ -84,13 +84,17 @@ def ensure_original_track(db: Session, clip: Clip) -> AudioTrack:
     )
     if existing:
         return existing
+    # Honor pre-generation wizard audio intent when first creating the original track.
+    mode = ((clip.audio_config or {}).get("generation_audio_mode") or "preserve").lower()
+    muted = mode in {"remove", "replace", "music", "voiceover"}
+    volume = 0.0 if mode == "remove" else (0.35 if mode in {"music", "voiceover"} else 1.0)
     track = AudioTrack(
         clip_id=clip.id,
         track_type="original",
         label="Original",
-        volume=1.0,
-        muted=False,
-        ducking_enabled=False,
+        volume=volume,
+        muted=muted,
+        ducking_enabled=mode in {"music", "voiceover"},
         end_seconds=float(clip.duration_seconds),
     )
     db.add(track)

@@ -14,6 +14,9 @@ import {
   ClipWaveforms,
   DashboardStats,
   ExportProfile,
+  GenerationConfiguration,
+  GenerationConfigurationOut,
+  GenerationProfile,
   Highlight,
   ProcessingJob,
   Project,
@@ -79,6 +82,71 @@ export class ApiService {
 
   analyzeVideo(videoId: string, body: Record<string, unknown> = {}): Observable<ProcessingJob> {
     return this.http.post<ProcessingJob>(`${this.baseUrl}/videos/${videoId}/analyze`, body);
+  }
+
+  getGenerationConfiguration(videoId: string): Observable<GenerationConfigurationOut> {
+    return this.http.get<GenerationConfigurationOut>(
+      `${this.baseUrl}/videos/${videoId}/generation-configuration`
+    );
+  }
+
+  saveGenerationConfiguration(
+    videoId: string,
+    body: {
+      configuration: GenerationConfiguration;
+      apply_profile?: boolean;
+      profile_id?: string | null;
+      confirm_overwrite?: boolean;
+    }
+  ): Observable<GenerationConfigurationOut> {
+    return this.http.put<GenerationConfigurationOut>(
+      `${this.baseUrl}/videos/${videoId}/generation-configuration`,
+      body
+    );
+  }
+
+  validateGenerationConfiguration(
+    videoId: string,
+    configuration: GenerationConfiguration
+  ): Observable<{ validation: GenerationConfigurationOut['validation']; summary: string[] }> {
+    return this.http.post<{ validation: GenerationConfigurationOut['validation']; summary: string[] }>(
+      `${this.baseUrl}/videos/${videoId}/generation-configuration/validate`,
+      configuration
+    );
+  }
+
+  videoThumbnailUrl(videoId: string): string {
+    return `${this.baseUrl}/videos/${videoId}/thumbnail`;
+  }
+
+  listGenerationProfiles(): Observable<GenerationProfile[]> {
+    return this.http.get<GenerationProfile[]>(`${this.baseUrl}/generation-profiles`);
+  }
+
+  createGenerationProfile(body: {
+    name: string;
+    slug?: string;
+    description?: string;
+    config_json: GenerationConfiguration;
+  }): Observable<GenerationProfile> {
+    return this.http.post<GenerationProfile>(`${this.baseUrl}/generation-profiles`, body);
+  }
+
+  updateGenerationProfile(
+    id: string,
+    body: { name?: string; description?: string; config_json?: GenerationConfiguration }
+  ): Observable<GenerationProfile> {
+    return this.http.patch<GenerationProfile>(`${this.baseUrl}/generation-profiles/${id}`, body);
+  }
+
+  duplicateGenerationProfile(id: string, name?: string): Observable<GenerationProfile> {
+    return this.http.post<GenerationProfile>(`${this.baseUrl}/generation-profiles/${id}/duplicate`, {
+      name: name || null,
+    });
+  }
+
+  deleteGenerationProfile(id: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.baseUrl}/generation-profiles/${id}`);
   }
 
   transcribeVideo(

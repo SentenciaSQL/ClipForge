@@ -1,0 +1,43 @@
+<div class="settings-grid">
+  <label>
+    <span class="avc-label">Minimum duration (seconds)</span>
+    <input
+      class="avc-input mt-2"
+      type="number"
+      min="1"
+      max="120"
+      [ngModel]="config.min_duration"
+      (ngModelChange)="setMin($event)"
+    />
+  </label>
+  <label>
+    <span class="avc-label">Maximum duration (seconds)</span>
+    <input
+      class="avc-input mt-2"
+      type="number"
+      min="1"
+      max="180"
+      [ngModel]="config.max_duration"
+      (ngModelChange)="setMax($event)"
+    />
+  </label>
+  <label>
+    <span class="avc-label">Target number of clips</span>
+    <input
+      class="avc-input mt-2"
+      type="number"
+      min="1"
+      max="50"
+      [disabled]="config.auto_clip_count"
+      [ngModel]="config.clip_count"
+      (ngModelChange)="setCount($event)"
+    />
+  </label>
+  <label class="toggle">
+    <input type="checkbox" [ngModel]="config.auto_clip_count" (ngModelChange)="setAuto($event)" />
+    <span>Automatically determine the number of clips</span>
+  </label>
+</div>
+<p class="hint" *ngIf="videoDuration">
+  Source duration: {{ videoDuration | number: '1.1-1' }}s. Min cannot exceed source length.
+</p>

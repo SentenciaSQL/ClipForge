@@ -1,0 +1,43 @@
+<div class="format">
+  <div class="format__controls">
+    <label>
+      <span class="avc-label">Output format</span>
+      <select class="avc-input mt-2" [ngModel]="config.aspect_ratio" (ngModelChange)="setAspect($event)">
+        <option *ngFor="let aspect of aspects" [value]="aspect.key">{{ aspect.label }}</option>
+      </select>
+    </label>
+    <label>
+      <span class="avc-label">Resolution</span>
+      <select class="avc-input mt-2" [ngModel]="config.resolution_label" (ngModelChange)="setResolution($event)">
+        <option *ngFor="let res of resolutions" [value]="res.key">{{ res.label }}</option>
+      </select>
+    </label>
+    <label>
+      <span class="avc-label">FPS</span>
+      <select class="avc-input mt-2" [ngModel]="fpsKey()" (ngModelChange)="setFps($event)">
+        <option *ngFor="let fps of fpsOptions" [value]="fps.key">{{ fps.label }}</option>
+      </select>
+    </label>
+    <ng-container *ngIf="config.aspect_ratio === 'custom'">
+      <label>
+        <span class="avc-label">Custom width</span>
+        <input class="avc-input mt-2" type="number" [(ngModel)]="config.width" (ngModelChange)="emit()" />
+      </label>
+      <label>
+        <span class="avc-label">Custom height</span>
+        <input class="avc-input mt-2" type="number" [(ngModel)]="config.height" (ngModelChange)="emit()" />
+      </label>
+    </ng-container>
+  </div>
+
+  <div class="format__preview">
+    <div class="avc-label">Format preview</div>
+    <div class="format__frame-wrap">
+      <div class="format__frame" [ngStyle]="previewStyle()">
+        <span>{{ config.width }}×{{ config.height }}</span>
+      </div>
+    </div>
+  </div>
+
+  <p class="warn" *ngIf="upscaleWarning() as warn">{{ warn }}</p>
+</div>

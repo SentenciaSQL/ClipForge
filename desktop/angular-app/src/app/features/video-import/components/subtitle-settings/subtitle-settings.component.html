@@ -1,0 +1,118 @@
+<div class="subs">
+  <label class="toggle toggle--hero">
+    <input type="checkbox" [ngModel]="config.enabled" (ngModelChange)="setEnabled($event)" />
+    <span>
+      <strong>Include subtitles</strong>
+      <small>{{ config.enabled ? 'ON — burn-in during render' : 'OFF — clips without burned-in subtitles' }}</small>
+    </span>
+  </label>
+
+  <div class="subs__fields" *ngIf="config.enabled">
+    <label>
+      <span class="avc-label">Subtitle preset</span>
+      <select class="avc-input mt-2" [ngModel]="config.preset_slug" (ngModelChange)="setPreset($event)">
+        <option *ngFor="let preset of presets" [value]="preset.slug">{{ preset.name }}</option>
+      </select>
+    </label>
+    <label>
+      <span class="avc-label">Font family</span>
+      <select
+        class="avc-input mt-2"
+        [ngModel]="config.style.font_family"
+        (ngModelChange)="patchStyle('font_family', $event)"
+      >
+        <option *ngFor="let font of fonts" [value]="font">{{ font }}</option>
+      </select>
+    </label>
+    <label>
+      <span class="avc-label">Font size</span>
+      <input
+        class="avc-input mt-2"
+        type="number"
+        min="12"
+        max="200"
+        [ngModel]="config.style.font_size"
+        (ngModelChange)="patchStyle('font_size', +$event)"
+      />
+    </label>
+    <label>
+      <span class="avc-label">Font color</span>
+      <input
+        class="avc-input mt-2"
+        type="color"
+        [ngModel]="config.style.text_color"
+        (ngModelChange)="patchStyle('text_color', $event)"
+      />
+    </label>
+    <label>
+      <span class="avc-label">Highlight color</span>
+      <input
+        class="avc-input mt-2"
+        type="color"
+        [ngModel]="config.style.highlight_color"
+        (ngModelChange)="patchStyle('highlight_color', $event)"
+      />
+    </label>
+    <label>
+      <span class="avc-label">Outline width</span>
+      <input
+        class="avc-input mt-2"
+        type="number"
+        min="0"
+        max="12"
+        [ngModel]="config.style.outline_width"
+        (ngModelChange)="patchStyle('outline_width', +$event)"
+      />
+    </label>
+    <label>
+      <span class="avc-label">Shadow</span>
+      <input
+        class="avc-input mt-2"
+        type="number"
+        min="0"
+        max="12"
+        [ngModel]="config.style.shadow"
+        (ngModelChange)="patchStyle('shadow', +$event)"
+      />
+    </label>
+    <label>
+      <span class="avc-label">Position</span>
+      <select
+        class="avc-input mt-2"
+        [ngModel]="config.style.position"
+        (ngModelChange)="patchStyle('position', $event)"
+      >
+        <option *ngFor="let pos of positions" [value]="pos">{{ pos }}</option>
+      </select>
+    </label>
+    <label>
+      <span class="avc-label">Animation</span>
+      <select
+        class="avc-input mt-2"
+        [ngModel]="config.style.animation"
+        (ngModelChange)="patchStyle('animation', $event)"
+      >
+        <option *ngFor="let anim of animations" [value]="anim">{{ anim }}</option>
+      </select>
+    </label>
+    <label>
+      <span class="avc-label">Max lines per subtitle</span>
+      <input
+        class="avc-input mt-2"
+        type="number"
+        min="1"
+        max="4"
+        [ngModel]="config.style.max_lines"
+        (ngModelChange)="patchStyle('max_lines', +$event)"
+      />
+    </label>
+    <label class="toggle">
+      <input
+        type="checkbox"
+        [ngModel]="config.style.animation === 'word' || config.style.animation === 'karaoke'"
+        (ngModelChange)="patchStyle('animation', $event ? 'word' : 'static')"
+      />
+      <span>Word-by-word highlighting</span>
+    </label>
+  </div>
+</div>

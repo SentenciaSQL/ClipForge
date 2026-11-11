@@ -1,0 +1,34 @@
+.subs {
+  display: grid;
+  gap: 1rem;
+}
+
+.toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.toggle--hero {
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--avc-accent) 35%, var(--avc-line));
+  background: color-mix(in srgb, var(--avc-accent) 8%, transparent);
+}
+
+.toggle--hero strong {
+  display: block;
+}
+
+.toggle--hero small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--avc-muted);
+}
+
+.subs__fields {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}

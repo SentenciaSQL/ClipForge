@@ -17,6 +17,7 @@ def persist_highlights(
     *,
     selected: list[RankedCandidate],
     subtitle_preset_slug: str = "hormozi",
+    reframing_mode: str = "auto",
 ) -> tuple[list[Highlight], list[Clip]]:
     db.execute(delete(Highlight).where(Highlight.video_id == video.id))
     db.execute(delete(Clip).where(Clip.video_id == video.id))
@@ -65,7 +66,7 @@ def persist_highlights(
             hook=row.hook,
             transcript=row.transcript,
             subtitle_preset_id=preset.id if preset else None,
-            reframing_mode="auto",
+            reframing_mode=reframing_mode or "auto",
             status="candidate",
             render_settings={"rank": index},
         )

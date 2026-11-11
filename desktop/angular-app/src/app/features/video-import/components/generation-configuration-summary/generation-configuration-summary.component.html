@@ -1,0 +1,28 @@
+<section class="summary avc-panel">
+  <div class="avc-label">Configuration summary</div>
+  <h2 class="summary__title">Review before generating</h2>
+  <ul class="summary__list">
+    <li *ngFor="let line of summary">{{ line }}</li>
+  </ul>
+
+  <div class="summary__errors" *ngIf="errors.length">
+    <div *ngFor="let err of errors">{{ err }}</div>
+  </div>
+  <div class="summary__warnings" *ngIf="warnings.length">
+    <div *ngFor="let warn of warnings">{{ warn }}</div>
+  </div>
+
+  <div class="summary__actions">
+    <button type="button" class="avc-btn-ghost" (click)="back.emit()" [disabled]="busy">
+      Back to Configuration
+    </button>
+    <button
+      type="button"
+      class="avc-btn-primary"
+      (click)="generate.emit()"
+      [disabled]="busy || errors.length > 0"
+    >
+      Generate Clips
+    </button>
+  </div>
+</section>

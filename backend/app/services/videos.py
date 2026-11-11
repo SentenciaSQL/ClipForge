@@ -13,9 +13,10 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.database.models import Project, SourceVideo
+from app.media.ffmpeg import get_ffmpeg, run_command
 from app.media.metadata import extract_metadata
 from app.schemas.videos import SourceVideoOut, VideoMetadataOut
-from app.storage.paths import is_supported_video, sanitize_filename, store_uploaded_video
+from app.storage.paths import is_supported_video, sanitize_filename, store_uploaded_video, video_temp_dir
 
 logger = get_logger(__name__)
 
@@ -46,7 +47,47 @@ def _metadata_out(video: SourceVideo, include_raw: bool = False) -> VideoMetadat
     )
 
 
+def ensure_video_thumbnail(video: SourceVideo) -> str | None:
+    """Extract a JPEG poster frame near the start of the video."""
+    if video.thumbnail_path and Path(video.thumbnail_path).exists():
+        return video.thumbnail_path
+    source = Path(video.stored_path)
+    if not source.exists():
+        return None
+    out_dir = video_temp_dir(video.id) / "thumbnails"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "poster.jpg"
+    seek = 1.0
+    if video.duration_seconds and video.duration_seconds > 3:
+        seek = min(3.0, float(video.duration_seconds) * 0.1)
+    try:
+        ffmpeg = get_ffmpeg()
+        run_command(
+            [
+                ffmpeg,
+                "-y",
+                "-ss",
+                f"{seek:.2f}",
+                "-i",
+                str(source),
+                "-frames:v",
+                "1",
+                "-q:v",
+                "3",
+                str(out_path),
+            ],
+            timeout=60,
+        )
+        if out_path.exists():
+            video.thumbnail_path = str(out_path)
+            return video.thumbnail_path
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Thumbnail extraction failed for %s: %s", video.id, exc)
+    return None
+
+
 def video_to_out(video: SourceVideo, include_raw: bool = False) -> SourceVideoOut:
+    meta = _metadata_out(video, include_raw=include_raw)
     return SourceVideoOut(
         id=video.id,
         project_id=video.project_id,
@@ -63,9 +104,11 @@ def video_to_out(video: SourceVideo, include_raw: bool = False) -> SourceVideoOu
         aspect_ratio=video.aspect_ratio,
         bitrate=video.bitrate,
         status=video.status,
+        thumbnail_path=video.thumbnail_path,
+        has_audio=bool(video.audio_codec) or (meta.audio_stream_count > 0 if meta else False),
         created_at=video.created_at,
         updated_at=video.updated_at,
-        metadata=_metadata_out(video, include_raw=include_raw),
+        metadata=meta,
     )
 
 
@@ -131,6 +174,7 @@ async def import_video_file(
         db.add(video)
         db.flush()
         apply_metadata(video, stored_path)
+        ensure_video_thumbnail(video)
         project.status = "active"
         db.commit()
         db.refresh(project)

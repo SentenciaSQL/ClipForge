@@ -1,0 +1,51 @@
+<section class="meta avc-panel">
+  <div class="meta__preview">
+    <img
+      *ngIf="!thumbError"
+      class="meta__thumb"
+      [src]="thumbnailUrl()"
+      [alt]="video.original_filename"
+      (error)="thumbError = true"
+    />
+    <div *ngIf="thumbError" class="meta__thumb meta__thumb--fallback">Preview unavailable</div>
+  </div>
+  <div class="meta__body">
+    <div class="avc-label">Source video</div>
+    <h2 class="meta__title">{{ video.original_filename }}</h2>
+    <p class="meta__sub" *ngIf="projectName">Project: {{ projectName }} · Status: {{ video.status }}</p>
+    <dl class="meta__grid">
+      <div>
+        <dt>Duration</dt>
+        <dd>{{ video.duration_seconds != null ? (video.duration_seconds | number: '1.1-1') + ' s' : '—' }}</dd>
+      </div>
+      <div>
+        <dt>Resolution</dt>
+        <dd>{{ video.width && video.height ? video.width + '×' + video.height : '—' }}</dd>
+      </div>
+      <div>
+        <dt>Aspect ratio</dt>
+        <dd>{{ video.aspect_ratio || '—' }}</dd>
+      </div>
+      <div>
+        <dt>Frame rate</dt>
+        <dd>{{ video.fps != null ? (video.fps | number: '1.2-3') + ' FPS' : '—' }}</dd>
+      </div>
+      <div>
+        <dt>Video codec</dt>
+        <dd>{{ video.video_codec || '—' }}</dd>
+      </div>
+      <div>
+        <dt>Audio codec</dt>
+        <dd>{{ video.audio_codec || '—' }}</dd>
+      </div>
+      <div>
+        <dt>File size</dt>
+        <dd>{{ fileSizeMb() }} MB</dd>
+      </div>
+      <div>
+        <dt>Audio track</dt>
+        <dd>{{ hasAudio() ? 'Available' : 'Not detected' }}</dd>
+      </div>
+    </dl>
+  </div>
+</section>

@@ -1,0 +1,44 @@
+<div class="ai-grid">
+  <label>
+    <span class="avc-label">Language</span>
+    <select class="avc-input mt-2" [ngModel]="languageValue()" (ngModelChange)="setLanguage($event)">
+      <option *ngFor="let lang of languages" [value]="lang.value">{{ lang.label }}</option>
+    </select>
+  </label>
+  <label>
+    <span class="avc-label">Transcription model (Whisper)</span>
+    <select class="avc-input mt-2" [(ngModel)]="config.whisper_model" (ngModelChange)="emit()">
+      <option *ngFor="let model of whisperModels" [value]="model">{{ model }}</option>
+    </select>
+  </label>
+  <label>
+    <span class="avc-label">AI analysis model (Ollama)</span>
+    <input
+      class="avc-input mt-2"
+      type="text"
+      placeholder="Use app default"
+      [ngModel]="config.ollama_model || ''"
+      (ngModelChange)="config.ollama_model = $event || null; emit()"
+    />
+  </label>
+  <label>
+    <span class="avc-label">Highlight detection sensitivity</span>
+    <select class="avc-input mt-2" [(ngModel)]="config.sensitivity" (ngModelChange)="emit()">
+      <option *ngFor="let item of sensitivities" [value]="item.value">{{ item.label }}</option>
+    </select>
+  </label>
+  <label>
+    <span class="avc-label">Content category</span>
+    <select class="avc-input mt-2" [ngModel]="config.content_category" (ngModelChange)="setCategory($event)">
+      <option *ngFor="let cat of categories" [value]="cat">{{ cat }}</option>
+    </select>
+  </label>
+  <label class="toggle">
+    <input type="checkbox" [ngModel]="config.auto_detect_content_type" (ngModelChange)="setAutoDetect($event)" />
+    <span>Automatically detect content type</span>
+  </label>
+  <label class="toggle">
+    <input type="checkbox" [(ngModel)]="config.force_retranscribe" (ngModelChange)="emit()" />
+    <span>Force re-transcription (ignore cache)</span>
+  </label>
+</div>

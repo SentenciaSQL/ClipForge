@@ -109,8 +109,8 @@ def analyze_video(
     db: Session = Depends(get_db),
 ) -> ProcessingJobOut:
     """
-    Queue analysis. Phase 2 runs audio extraction + Faster-Whisper transcription.
-    Later stages are marked deferred until Phase 3+.
+    Queue analysis. Requires an explicit Generate Clips action from the UI.
+    Accepts a full generation_config (preferred) or legacy flat analyze fields.
     """
     video = get_video(db, video_id)
     if not video:
@@ -118,7 +118,45 @@ def analyze_video(
     if not get_project(db, video.project_id):
         raise HTTPException(status_code=404, detail="Project not found")
 
-    settings = payload.model_dump()
+    from app.schemas.generation_config import GenerationConfiguration
+    from app.services.generation_config import (
+        get_generation_configuration,
+        save_generation_configuration,
+        validate_generation_configuration,
+    )
+
+    if payload.generation_config:
+        try:
+            gen_cfg = GenerationConfiguration.model_validate(payload.generation_config)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"Invalid generation_config: {exc}") from exc
+    else:
+        # Merge legacy flat fields onto saved/default generation config.
+        gen_cfg = get_generation_configuration(video)
+        data = gen_cfg.model_dump()
+        data["analysis"]["language"] = payload.language
+        if payload.whisper_model:
+            data["analysis"]["whisper_model"] = payload.whisper_model
+        if payload.ollama_model:
+            data["analysis"]["ollama_model"] = payload.ollama_model
+        data["analysis"]["force_retranscribe"] = payload.force
+        data["duration"]["clip_count"] = payload.clip_count
+        data["duration"]["min_duration"] = payload.min_duration
+        data["duration"]["max_duration"] = payload.max_duration
+        data["subtitles"]["preset_slug"] = payload.subtitle_preset
+        if payload.burn_subtitles is not None:
+            data["subtitles"]["enabled"] = payload.burn_subtitles
+        data["reframe"]["mode"] = payload.reframing_mode
+        gen_cfg = GenerationConfiguration.model_validate(data)
+
+    validation = validate_generation_configuration(gen_cfg, video=video)
+    if not validation.get("ok"):
+        raise HTTPException(status_code=400, detail={"validation": validation})
+
+    if payload.save_configuration:
+        save_generation_configuration(db, video, gen_cfg)
+
+    settings = gen_cfg.to_analyze_settings(video_duration=video.duration_seconds)
     job = ProcessingJob(
         project_id=video.project_id,
         video_id=video.id,

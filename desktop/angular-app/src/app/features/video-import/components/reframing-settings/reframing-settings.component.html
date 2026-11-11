@@ -1,0 +1,41 @@
+<div class="reframe">
+  <div class="reframe__options">
+    <button
+      type="button"
+      class="reframe__option"
+      *ngFor="let mode of modes"
+      [class.reframe__option--active]="config.mode === mode.key"
+      (click)="select(mode.key)"
+    >
+      <strong>{{ mode.label }}</strong>
+      <span>{{ mode.help }}</span>
+    </button>
+  </div>
+
+  <label *ngIf="config.mode === 'solid_bg'">
+    <span class="avc-label">Background color</span>
+    <input class="avc-input mt-2" type="color" [(ngModel)]="config.background_color" (ngModelChange)="emit()" />
+  </label>
+
+  <div class="reframe__manual" *ngIf="config.mode === 'manual'">
+    <p class="hint">Manual crop uses normalized coordinates (0–1). Fine-tune later in Clips Studio.</p>
+    <div class="reframe__manual-grid">
+      <label>
+        <span class="avc-label">X</span>
+        <input class="avc-input mt-2" type="number" min="0" max="1" step="0.01" [(ngModel)]="config.manual_crop!.x" (ngModelChange)="emit()" />
+      </label>
+      <label>
+        <span class="avc-label">Y</span>
+        <input class="avc-input mt-2" type="number" min="0" max="1" step="0.01" [(ngModel)]="config.manual_crop!.y" (ngModelChange)="emit()" />
+      </label>
+      <label>
+        <span class="avc-label">Width</span>
+        <input class="avc-input mt-2" type="number" min="0.05" max="1" step="0.01" [(ngModel)]="config.manual_crop!.width" (ngModelChange)="emit()" />
+      </label>
+      <label>
+        <span class="avc-label">Height</span>
+        <input class="avc-input mt-2" type="number" min="0.05" max="1" step="0.01" [(ngModel)]="config.manual_crop!.height" (ngModelChange)="emit()" />
+      </label>
+    </div>
+  </div>
+</div>
