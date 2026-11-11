@@ -24,10 +24,11 @@ Rules:
 - Propose moments with strong hooks that make sense independently.
 - Avoid starting mid-sentence or ending before an idea completes.
 - Prefer complete ideas: stories, advice, educational explanations, controversy, emotion, humor, revelations, Q&A, conclusions, memorable statements.
-- Also work for trailers, cinematic dialogue, ads, and sparse speech: pick the most striking lines and expand to 12–30s windows.
-- Always propose at least 1 candidate when the window has any spoken dialogue, unless there is truly no usable speech.
+- Also work for trailers, cinematic dialogue, ads, music beds, rhythm edits, and sparse speech.
+- Spoken words are NOT required. Music, lyrics-as-atmosphere, beats, and visual moments are valid clips (audio may be replaced externally later).
+- Always propose at least 1 candidate for the window when there is any content (speech OR timed segments). Prefer striking lines when present; otherwise propose the strongest 12–30s pacing windows.
 - category MUST be one of: hook, story, advice, educational, controversial, emotional, funny, revelation, qa, conclusion, memorable, general.
-- Candidate duration should target 12 to 30 seconds (wall-clock, silence between lines is OK).
+- Candidate duration should target 12 to 30 seconds (wall-clock; silence/music between lines is OK).
 - Use timestamps that refer to the absolute times provided in the transcript window.
 - Scores are 0-100 estimates of engagement potential, not guaranteed virality.
 """
@@ -49,8 +50,8 @@ def _user_prompt(chunk: TranscriptChunk, min_seconds: int, max_seconds: int) -> 
         '"emotional_engagement":0,"message_clarity":0,"segment_independence":0,"ending_quality":0}]}'
     )
     lines.append(
-        "Return 1-5 candidates for this window when speech exists. "
-        "Only return an empty candidates array if there is no spoken dialogue."
+        "Return 1-5 candidates for this window. Spoken words are optional — "
+        "music/rhythm/visual moments are valid. Only return an empty array if the window is unusable."
     )
     return "\n".join(lines)
 
@@ -94,20 +95,18 @@ class HighlightAnalyzer:
             )
 
         chunks = chunk_segments(segments, window_seconds=90.0, overlap_seconds=20.0)
-        if not chunks:
-            return []
 
         effective_min = min_seconds
         effective_max = max_seconds
-        if video_duration is not None and video_duration < min_seconds:
-            logger.warning(
-                "Video duration %.1fs is shorter than minimum clip length %ss; no 12–30s clips possible",
-                video_duration,
-                min_seconds,
-            )
-            return []
         if video_duration is not None:
-            effective_max = min(max_seconds, max(int(video_duration), min_seconds))
+            effective_max = min(max_seconds, max(int(video_duration), min(min_seconds, int(video_duration) or min_seconds)))
+            if video_duration < min_seconds:
+                logger.info(
+                    "Video duration %.1fs is shorter than preferred minimum %ss; allowing shorter full-length clips",
+                    video_duration,
+                    min_seconds,
+                )
+                effective_min = max(1, int(video_duration))
 
         raw_candidates: list[RankedCandidate] = []
         for chunk in chunks:
@@ -125,11 +124,11 @@ class HighlightAnalyzer:
                     min_seconds=float(effective_min),
                     max_seconds=float(effective_max),
                     video_duration=video_duration,
-                    min_words=5,
+                    min_words=0,
                 )
                 if not snapped:
                     logger.info(
-                        "Rejected proposal outside transcript bounds: %.2f-%.2f",
+                        "Rejected proposal outside bounds: %.2f-%.2f",
                         proposal.start_seconds,
                         proposal.end_seconds,
                     )
@@ -147,13 +146,14 @@ class HighlightAnalyzer:
                     },
                     audio_quality=estimate_audio_quality(stats),
                 )
+                hook = proposal.hook.strip() or (text[:120] if text else f"Moment {start:.0f}s–{end:.0f}s")
                 raw_candidates.append(
                     RankedCandidate(
                         start_seconds=round(start, 3),
                         end_seconds=round(end, 3),
                         duration_seconds=round(end - start, 3),
                         transcript=text,
-                        hook=proposal.hook.strip(),
+                        hook=hook,
                         category=proposal.category,
                         description=proposal.description.strip(),
                         reason=proposal.reason.strip(),
@@ -166,7 +166,7 @@ class HighlightAnalyzer:
         selected = select_distinct_candidates(raw_candidates, max_count=max(1, clip_count))
         if not selected:
             logger.warning(
-                "Ollama produced 0 usable clips (raw=%s); running transcript heuristic fallback",
+                "Ollama produced 0 usable clips (raw=%s); running speech-optional heuristic fallback",
                 len(raw_candidates),
             )
             selected = build_heuristic_candidates(
