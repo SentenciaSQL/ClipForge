@@ -32,12 +32,30 @@ import { ApiService } from '../../core/services/api.service';
           </select>
         </label>
         <label class="text-sm">
-          <span class="avc-label">Min duration (s)</span>
-          <input class="avc-input mt-2" type="number" [(ngModel)]="minDuration" name="min" min="12" max="30" />
+          <span class="avc-label">Min duration (seconds)</span>
+          <input
+            class="avc-input mt-2"
+            type="number"
+            [(ngModel)]="minDuration"
+            name="min"
+            min="12"
+            max="30"
+            step="1"
+            title="Clip length in seconds (not minutes)"
+          />
         </label>
         <label class="text-sm">
-          <span class="avc-label">Max duration (s)</span>
-          <input class="avc-input mt-2" type="number" [(ngModel)]="maxDuration" name="max" min="12" max="30" />
+          <span class="avc-label">Max duration (seconds)</span>
+          <input
+            class="avc-input mt-2"
+            type="number"
+            [(ngModel)]="maxDuration"
+            name="max"
+            min="12"
+            max="60"
+            step="1"
+            title="Clip length in seconds (not minutes)"
+          />
         </label>
         <label class="text-sm">
           <span class="avc-label">Number of clips</span>
@@ -196,6 +214,16 @@ export class ClipGenerationComponent implements OnInit, OnDestroy {
     this.api.listVideos().subscribe({
       next: (videos) => this.videos.set(videos),
       error: (err) => this.error.set(err?.message || 'Failed to load videos'),
+    });
+    this.api.getSettings().subscribe({
+      next: (settings) => {
+        if (settings.clip_min_seconds) {
+          this.minDuration = settings.clip_min_seconds;
+        }
+        if (settings.clip_max_seconds) {
+          this.maxDuration = settings.clip_max_seconds;
+        }
+      },
     });
   }
 

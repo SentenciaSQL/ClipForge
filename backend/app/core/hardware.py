@@ -3,17 +3,34 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Set when Whisper/CTranslate2 fails at runtime (e.g. missing cublas DLL).
+_cuda_runtime_blocked = False
+
+
+def mark_cuda_unusable(reason: str) -> None:
+    """Force subsequent hardware probes / Whisper loads onto CPU."""
+    global _cuda_runtime_blocked
+    _cuda_runtime_blocked = True
+    detect_hardware.cache_clear()
+    logger.warning("CUDA marked unusable for this process: %s", reason)
+
+
+def is_cuda_runtime_blocked() -> bool:
+    return _cuda_runtime_blocked
 
 
 @dataclass
@@ -106,10 +123,49 @@ def _detect_ram_gb() -> float | None:
     return None
 
 
-def _detect_nvidia() -> tuple[bool, str | None, float | None]:
+def _find_cublas_dll() -> str | None:
+    """Return path to a cuBLAS 11/12 DLL if discoverable on Windows."""
+    if platform.system() != "Windows":
+        return None
+    names = ("cublas64_12.dll", "cublas64_11.dll", "cublas64_10.dll")
+    search_dirs: list[Path] = []
+    cuda_path = os.environ.get("CUDA_PATH") or os.environ.get("CUDA_HOME")
+    if cuda_path:
+        search_dirs.append(Path(cuda_path) / "bin")
+    path_env = os.environ.get("PATH", "")
+    for entry in path_env.split(os.pathsep):
+        if entry:
+            search_dirs.append(Path(entry))
+    for directory in search_dirs:
+        for name in names:
+            candidate = directory / name
+            if candidate.exists():
+                return str(candidate)
+    return None
+
+
+def _ctranslate2_cuda_usable() -> bool:
+    """True only if CTranslate2 can actually see a CUDA device (libs loaded)."""
+    try:
+        import ctranslate2  # type: ignore
+
+        return int(ctranslate2.get_cuda_device_count()) > 0
+    except Exception as exc:  # noqa: BLE001
+        logger.info("CTranslate2 CUDA probe failed: %s", exc)
+        return False
+
+
+def _detect_nvidia() -> tuple[bool, str | None, float | None, list[str]]:
+    """
+    Detect NVIDIA presence AND whether Faster-Whisper/CTranslate2 can use CUDA.
+
+    nvidia-smi alone is not enough on Windows — missing cublas64_12.dll causes
+    RuntimeError during encode even when a GPU is installed.
+    """
+    notes: list[str] = []
     nvidia_smi = shutil.which("nvidia-smi")
     if not nvidia_smi:
-        return False, None, None
+        return False, None, None, notes
     try:
         result = subprocess.run(
             [
@@ -123,7 +179,7 @@ def _detect_nvidia() -> tuple[bool, str | None, float | None]:
             check=False,
         )
         if result.returncode != 0 or not result.stdout.strip():
-            return False, None, None
+            return False, None, None, notes
         first = result.stdout.strip().splitlines()[0]
         parts = [p.strip() for p in first.split(",")]
         name = parts[0] if parts else None
@@ -133,10 +189,26 @@ def _detect_nvidia() -> tuple[bool, str | None, float | None]:
                 vram = round(float(parts[1]) / 1024, 1)
             except ValueError:
                 vram = None
-        return True, name, vram
+
+        # Runtime readiness for CTranslate2 / Faster-Whisper
+        cublas = _find_cublas_dll()
+        ct2_ok = _ctranslate2_cuda_usable()
+        if platform.system() == "Windows" and not cublas:
+            notes.append(
+                "NVIDIA GPU detected but cublas64_12.dll was not found. "
+                "Install CUDA Toolkit 12.x (or add its \\bin to PATH), or set Whisper device to CPU."
+            )
+            return False, name, vram, notes
+        if not ct2_ok:
+            notes.append(
+                "NVIDIA GPU detected but CTranslate2 cannot use CUDA "
+                "(missing/incompatible CUDA runtime). Falling back to CPU for Whisper."
+            )
+            return False, name, vram, notes
+        return True, name, vram, notes
     except (OSError, subprocess.SubprocessError) as exc:
         logger.warning("nvidia-smi probe failed: %s", exc)
-        return False, None, None
+        return False, None, None, notes
 
 
 def _detect_ollama(settings: Settings) -> tuple[bool, list[str]]:
@@ -158,16 +230,21 @@ def detect_hardware() -> HardwareProfile:
     ffmpeg_path = _resolve_binary(settings.ffmpeg_path, ["ffmpeg", "ffmpeg.exe"])
     ffprobe_path = _resolve_binary(settings.ffprobe_path, ["ffprobe", "ffprobe.exe"])
     has_libass, has_nvenc = _probe_ffmpeg_features(ffmpeg_path)
-    cuda_available, gpu_name, gpu_vram = _detect_nvidia()
+    cuda_available, gpu_name, gpu_vram, cuda_notes = _detect_nvidia()
+    if _cuda_runtime_blocked:
+        cuda_available = False
+        cuda_notes = list(cuda_notes) + [
+            "CUDA disabled for this process after a runtime library error (e.g. missing cublas)."
+        ]
     ollama_available, ollama_models = _detect_ollama(settings)
 
-    notes: list[str] = []
+    notes: list[str] = list(cuda_notes)
     recommended = "cpu"
     if settings.prefer_gpu and cuda_available:
         recommended = "cuda"
     else:
         if settings.prefer_gpu and not cuda_available:
-            notes.append("GPU preferred but CUDA/nvidia-smi not available; using CPU fallback.")
+            notes.append("GPU preferred but usable CUDA runtime not available; using CPU fallback.")
         recommended = "cpu"
 
     if not ffmpeg_path:
@@ -183,8 +260,6 @@ def detect_hardware() -> HardwareProfile:
             f"Configured Ollama model '{settings.ollama_model}' not found. "
             f"Available: {', '.join(ollama_models) or 'none'}."
         )
-
-    import os
 
     profile = HardwareProfile(
         os_name=f"{platform.system()} {platform.release()}",

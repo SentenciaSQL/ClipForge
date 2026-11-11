@@ -45,10 +45,37 @@ import { ApiService } from '../../core/services/api.service';
         <label class="text-sm">
           <span class="avc-label">Whisper device</span>
           <select class="avc-input mt-2" [(ngModel)]="s.whisper_device" name="whisper_device">
-            <option value="auto">auto</option>
+            <option value="auto">auto (CPU if CUDA libs missing)</option>
             <option value="cuda">cuda</option>
             <option value="cpu">cpu</option>
           </select>
+          <p class="mt-1 text-xs text-muted">
+            If transcription fails with cublas64_12.dll, choose CPU or install CUDA Toolkit 12.x.
+          </p>
+        </label>
+        <label class="text-sm">
+          <span class="avc-label">Default clip min (seconds)</span>
+          <input
+            class="avc-input mt-2"
+            type="number"
+            min="12"
+            max="30"
+            step="1"
+            [(ngModel)]="s.clip_min_seconds"
+            name="clip_min_seconds"
+          />
+        </label>
+        <label class="text-sm">
+          <span class="avc-label">Default clip max (seconds)</span>
+          <input
+            class="avc-input mt-2"
+            type="number"
+            min="12"
+            max="60"
+            step="1"
+            [(ngModel)]="s.clip_max_seconds"
+            name="clip_max_seconds"
+          />
         </label>
         <label class="text-sm">
           <span class="avc-label">Workspace path</span>

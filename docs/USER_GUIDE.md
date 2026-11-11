@@ -79,7 +79,7 @@ Lista tus proyectos con conteo de videos/clips. Útil para organizar episodios o
 1. Menú **Generate**  
 2. Selecciona el **Source video**  
 3. Ajusta:
-   - duración min/max (12–30 s)  
+   - duración min/max en **segundos** (p. ej. 12–30 s, no minutos)  
    - número de clips  
    - idioma / Whisper / preset de subtítulos / reframe  
 4. Pulsa **Run full analysis**  
@@ -188,6 +188,7 @@ Import → Generate (análisis) → Clips Studio (Render 9:16)
 |---------|-----------|
 | Ollama offline | `ollama serve` y `ollama pull qwen3:8b` |
 | Whisper muy lento | Usa modelo `small`/`medium` o GPU CUDA |
+| `cublas64_12.dll is not found` | Falta el runtime CUDA 12. ClipForge cae a CPU automáticamente; o instala [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) y reinicia, o en Settings pon Whisper device = `cpu` |
 | Render falla | Revisa FFmpeg en PATH / Settings |
 | Sin clips | Ejecuta Generate hasta status `completed` |
 | Build Tauri | Usa PowerShell **sin admin**; Python 3.12 recomendado |

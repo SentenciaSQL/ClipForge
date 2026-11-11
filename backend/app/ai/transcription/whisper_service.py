@@ -10,12 +10,26 @@ from pathlib import Path
 from typing import Any, Literal
 
 from app.core.config import get_settings
-from app.core.hardware import detect_hardware
+from app.core.hardware import detect_hardware, is_cuda_runtime_blocked, mark_cuda_unusable
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
 WhisperModelName = Literal["large-v3", "distil-large-v3", "medium", "small", "base", "tiny"]
+
+
+def _is_cuda_runtime_error(exc: BaseException) -> bool:
+    """True for missing/broken CUDA libs (e.g. cublas64_12.dll on Windows)."""
+    message = str(exc).lower()
+    module = (getattr(type(exc), "__module__", "") or "").lower()
+    # Require a library-load style error, not every generic CUDA message.
+    if isinstance(exc, RuntimeError) or "ctranslate2" in module:
+        has_lib = any(
+            n in message
+            for n in ("cublas", "cudnn", "cudart", "dll", "library", "cannot be loaded", "not found")
+        )
+        return has_lib and any(n in message for n in ("cublas", "cudnn", "cudart", "cuda", "nvrtc"))
+    return False
 
 
 @dataclass
@@ -85,6 +99,10 @@ class WhisperService:
         settings = get_settings()
         hardware = detect_hardware()
         choice = (requested or settings.whisper_device or "auto").lower()
+        if is_cuda_runtime_blocked():
+            if choice in {"auto", "cuda"}:
+                logger.warning("CUDA runtime previously failed; using CPU for Whisper")
+            return "cpu"
         if choice == "auto":
             return "cuda" if hardware.cuda_available and settings.prefer_gpu else "cpu"
         if choice == "cuda" and not hardware.cuda_available:
@@ -126,7 +144,20 @@ class WhisperService:
         from faster_whisper import WhisperModel
 
         logger.info("Loading Faster-Whisper model=%s device=%s compute=%s", model_name, device, compute_type)
-        self._model = WhisperModel(model_name, device=device, compute_type=compute_type)
+        try:
+            self._model = WhisperModel(model_name, device=device, compute_type=compute_type)
+        except Exception as exc:
+            if device == "cuda" and _is_cuda_runtime_error(exc):
+                mark_cuda_unusable(str(exc))
+                logger.warning(
+                    "CUDA Whisper load failed (%s); retrying on CPU with int8",
+                    exc,
+                )
+                compute_type = self.resolve_compute_type("cpu", "auto")
+                self._model = WhisperModel(model_name, device="cpu", compute_type=compute_type)
+                self._loaded_key = (model_name, "cpu", compute_type)
+                return self._model
+            raise
         self._loaded_key = key
         return self._model
 
@@ -138,6 +169,77 @@ class WhisperService:
             import gc
 
             gc.collect()
+
+    def _transcribe_once(
+        self,
+        *,
+        audio_path: Path,
+        model_name: str,
+        device: str,
+        compute_type: str,
+        language: str | None,
+    ) -> TranscriptionResult:
+        model = self._load_model(model_name, device, compute_type)
+        # Prefer the device/compute actually loaded (may have fallen back during load).
+        if self._loaded_key is not None:
+            _, device, compute_type = self._loaded_key
+
+        audio_input: Any = self._load_audio_array(audio_path)
+        segments_iter, info = model.transcribe(
+            audio_input,
+            language=language,
+            beam_size=5,
+            word_timestamps=True,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 400},
+        )
+
+        segments: list[SegmentStamp] = []
+        words: list[WordStamp] = []
+        texts: list[str] = []
+        for index, segment in enumerate(segments_iter):
+            seg_words: list[WordStamp] = []
+            for word in segment.words or []:
+                stamp = WordStamp(
+                    word=word.word,
+                    start=float(word.start),
+                    end=float(word.end),
+                    confidence=float(word.probability) if word.probability is not None else None,
+                )
+                seg_words.append(stamp)
+                words.append(stamp)
+            text = (segment.text or "").strip()
+            if text:
+                texts.append(text)
+            segments.append(
+                SegmentStamp(
+                    id=index,
+                    start=float(segment.start),
+                    end=float(segment.end),
+                    text=text,
+                    avg_logprob=float(segment.avg_logprob) if segment.avg_logprob is not None else None,
+                    no_speech_prob=float(segment.no_speech_prob)
+                    if segment.no_speech_prob is not None
+                    else None,
+                    words=seg_words,
+                )
+            )
+
+        return TranscriptionResult(
+            language=getattr(info, "language", None),
+            language_probability=float(info.language_probability)
+            if getattr(info, "language_probability", None) is not None
+            else None,
+            duration_seconds=float(info.duration) if getattr(info, "duration", None) is not None else None,
+            model_name=model_name,
+            device=device,
+            compute_type=compute_type,
+            full_text=" ".join(texts).strip(),
+            segments=segments,
+            words=words,
+            audio_path=str(audio_path),
+            cache_key="",
+        )
 
     def _load_audio_array(self, audio_path: Path):
         """Return float32 mono PCM for Faster-Whisper without going through PyAV."""
@@ -256,64 +358,39 @@ class WhisperService:
                 return cached
 
         with self._lock:
-            model = self._load_model(resolved_model, resolved_device, resolved_compute)
-            # Load WAV ourselves to avoid PyAV API mismatches with faster-whisper.
-            audio_input: Any = self._load_audio_array(audio_path)
-            segments_iter, info = model.transcribe(
-                audio_input,
-                language=language,
-                beam_size=5,
-                word_timestamps=True,
-                vad_filter=True,
-                vad_parameters={"min_silence_duration_ms": 400},
-            )
-
-            segments: list[SegmentStamp] = []
-            words: list[WordStamp] = []
-            texts: list[str] = []
-            for index, segment in enumerate(segments_iter):
-                seg_words: list[WordStamp] = []
-                for word in segment.words or []:
-                    stamp = WordStamp(
-                        word=word.word,
-                        start=float(word.start),
-                        end=float(word.end),
-                        confidence=float(word.probability) if word.probability is not None else None,
-                    )
-                    seg_words.append(stamp)
-                    words.append(stamp)
-                text = (segment.text or "").strip()
-                if text:
-                    texts.append(text)
-                segments.append(
-                    SegmentStamp(
-                        id=index,
-                        start=float(segment.start),
-                        end=float(segment.end),
-                        text=text,
-                        avg_logprob=float(segment.avg_logprob) if segment.avg_logprob is not None else None,
-                        no_speech_prob=float(segment.no_speech_prob)
-                        if segment.no_speech_prob is not None
-                        else None,
-                        words=seg_words,
-                    )
+            try:
+                result = self._transcribe_once(
+                    audio_path=audio_path,
+                    model_name=resolved_model,
+                    device=resolved_device,
+                    compute_type=resolved_compute,
+                    language=language,
                 )
+            except Exception as exc:
+                # Model may load on CUDA then fail inside encode/detect_language when
+                # cublas DLLs are missing — unload and retry once on CPU.
+                if resolved_device == "cuda" and _is_cuda_runtime_error(exc):
+                    mark_cuda_unusable(str(exc))
+                    logger.warning(
+                        "CUDA transcription failed (%s); unloading GPU model and retrying on CPU",
+                        exc,
+                    )
+                    self._model = None
+                    self._loaded_key = None
+                    import gc
 
-            result = TranscriptionResult(
-                language=getattr(info, "language", None),
-                language_probability=float(info.language_probability)
-                if getattr(info, "language_probability", None) is not None
-                else None,
-                duration_seconds=float(info.duration) if getattr(info, "duration", None) is not None else None,
-                model_name=resolved_model,
-                device=resolved_device,
-                compute_type=resolved_compute,
-                full_text=" ".join(texts).strip(),
-                segments=segments,
-                words=words,
-                audio_path=str(audio_path),
-                cache_key=key,
-            )
+                    gc.collect()
+                    cpu_compute = self.resolve_compute_type("cpu", "auto")
+                    result = self._transcribe_once(
+                        audio_path=audio_path,
+                        model_name=resolved_model,
+                        device="cpu",
+                        compute_type=cpu_compute,
+                        language=language,
+                    )
+                else:
+                    raise
+            result.cache_key = key
 
         if use_cache:
             self.save_cache(cache_file, result)
