@@ -45,30 +45,33 @@ Run everything from the repo root unless a command says otherwise:
 cd C:\Users\PC\Documents\python\ClipForge
 ```
 
-### 0) PowerShell execution policy (required once)
+### 0) Prefer `.cmd` launchers (no ExecutionPolicy pain)
 
-Windows often blocks unsigned scripts (`Start-Dev.ps1`, `Setup-Dev.ps1`, …) with:
-
-`cannot be loaded. The file is not digitally signed`
-
-**Option A — allow your user to run local scripts (recommended, once):**
+Windows often blocks `.\scripts\Start-Dev.ps1` with *not digitally signed*.
+Use the **`.cmd`** wrappers instead — they call PowerShell with Bypass for you:
 
 ```powershell
+cd C:\Users\PC\Documents\python\ClipForge
+
+.\scripts\Verify-Environment.cmd
+.\scripts\Setup-Dev.cmd
+.\scripts\Start-Dev.cmd
+.\scripts\Build-Release.cmd
+```
+
+These work from **PowerShell** and from **cmd.exe**.
+
+If you still prefer the `.ps1` files:
+
+```powershell
+# Once per Windows user
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
 
-Close and reopen PowerShell, then use `.\scripts\...` normally.
-
-**Option B — run one script without changing policy:**
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Verify-Environment.ps1
-powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Dev.ps1
+# Or one-shot without changing policy
 powershell -ExecutionPolicy Bypass -File .\scripts\Start-Dev.ps1
-powershell -ExecutionPolicy Bypass -File .\scripts\Build-Release.ps1
 ```
 
-**Option C — skip scripts entirely** and use the [manual commands](#manual-start-no-scripts) below.
+Or skip scripts and use the [manual commands](#manual-start-no-scripts) below.
 
 ### 1) Environment file (`.env`)
 
@@ -97,13 +100,13 @@ Important variables (see `.env.example`):
 ### 2) Verify toolchain
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Verify-Environment.ps1
+.\scripts\Verify-Environment.cmd
 ```
 
 ### 3) One-time setup
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Dev.ps1
+.\scripts\Setup-Dev.cmd
 ```
 
 Creates `.env` (if needed), `backend\.venv`, installs Python deps, and runs `npm install` for Angular.
@@ -112,15 +115,14 @@ Then apply DB migrations:
 
 ```powershell
 cd backend
-.\.venv\Scripts\Activate.ps1
-alembic upgrade head
+.\.venv\Scripts\python.exe -m alembic upgrade head
 cd ..
 ```
 
 ### 4) Development mode (browser + API)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Start-Dev.ps1
+.\scripts\Start-Dev.cmd
 ```
 
 | Service | URL |
@@ -175,7 +177,7 @@ Use a **normal** PowerShell window (not Administrator):
 
 ```powershell
 git pull
-powershell -ExecutionPolicy Bypass -File .\scripts\Build-Release.ps1
+.\scripts\Build-Release.cmd
 ```
 
 What it builds:
