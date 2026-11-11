@@ -212,6 +212,7 @@ All inference and media processing are designed to run locally. Source videos an
 
 ## Documentation
 
+- **[Guía de uso (con capturas)](docs/USER_GUIDE.md)** ← empieza aquí si es tu primera vez
 - [Architecture](docs/ARCHITECTURE.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [API](docs/API.md)
