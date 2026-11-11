@@ -190,6 +190,7 @@ Import → Generate (análisis) → Clips Studio (Render 9:16)
 | Whisper muy lento | Usa modelo `small`/`medium` o GPU CUDA |
 | `cublas64_12.dll is not found` | **CUDA 13 no vale** (trae `cublas64_13.dll`). En el venv: `pip install -r requirements-cuda-windows.txt`, reinicia Uvicorn. O instala [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) junto a 13, o Settings → Whisper = `cpu` |
 | Render falla | Revisa FFmpeg en PATH / Settings |
+| `cv2` / `CascadeClassifier` | OpenCV roto o paquete equivocado. En el venv: `pip uninstall -y opencv-python opencv-python-headless cv2` y luego `pip install opencv-python-headless==4.10.0.84`. El export igual puede usar center crop. |
 | Sin clips / `0 clips selected` | Vuelve a lanzar Generate tras actualizar. Las palabras **no son obligatorias**: música/ritmo/planos visuales también generan clips; el audio se puede reemplazar después en otra app. |
 | Build Tauri | Usa PowerShell **sin admin**; Python 3.12 recomendado |
 
