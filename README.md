@@ -178,6 +178,18 @@ AVC_HF_TOKEN=hf_...
 
 `requirements-optional.txt` is **only** for optional extras (pyannote/torch). The core app runs without it.
 
+### Windows GPU (CUDA 12 DLLs for Faster-Whisper)
+
+CTranslate2 needs **`cublas64_12.dll`**. CUDA Toolkit **13.x alone is not enough** (it ships `cublas64_13.dll`).
+
+```powershell
+cd backend
+.\.venv\Scripts\activate
+pip install -r requirements-cuda-windows.txt
+```
+
+Restart the backend afterward. ClipForge prepends the pip package `bin` folders to `PATH` automatically. You can keep CUDA 13 installed; just add the CUDA 12 libs via pip (or install Toolkit 12.x alongside).
+
 ---
 
 ## Environment tips
