@@ -357,6 +357,11 @@ class WhisperService:
                 cached.cache_key = key
                 return cached
 
+        if resolved_device == "cuda":
+            from app.core.cuda_runtime import ensure_cuda12_dll_path
+
+            ensure_cuda12_dll_path()
+
         with self._lock:
             try:
                 result = self._transcribe_once(

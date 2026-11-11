@@ -188,7 +188,7 @@ Import → Generate (análisis) → Clips Studio (Render 9:16)
 |---------|-----------|
 | Ollama offline | `ollama serve` y `ollama pull qwen3:8b` |
 | Whisper muy lento | Usa modelo `small`/`medium` o GPU CUDA |
-| `cublas64_12.dll is not found` | Falta el runtime CUDA 12. ClipForge cae a CPU automáticamente; o instala [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) y reinicia, o en Settings pon Whisper device = `cpu` |
+| `cublas64_12.dll is not found` | **CUDA 13 no vale** (trae `cublas64_13.dll`). En el venv: `pip install -r requirements-cuda-windows.txt`, reinicia Uvicorn. O instala [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) junto a 13, o Settings → Whisper = `cpu` |
 | Render falla | Revisa FFmpeg en PATH / Settings |
 | Sin clips | Ejecuta Generate hasta status `completed` |
 | Build Tauri | Usa PowerShell **sin admin**; Python 3.12 recomendado |

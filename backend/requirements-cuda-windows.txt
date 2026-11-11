@@ -1,0 +1,11 @@
+# Optional Windows GPU helpers for Faster-Whisper / CTranslate2.
+# Official CT2 wheels need CUDA 12 DLLs (cublas64_12.dll).
+# CUDA Toolkit 13.x alone is NOT enough — it ships cublas64_13.dll.
+#
+# From the backend venv:
+#   pip install -r requirements-cuda-windows.txt
+# Then restart the backend. ClipForge prepends these package bin dirs to PATH.
+
+nvidia-cublas-cu12>=12.4.5.8
+nvidia-cudnn-cu12>=9.1.0.70
+nvidia-cuda-nvrtc-cu12>=12.4.127

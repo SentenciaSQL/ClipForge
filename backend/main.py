@@ -11,6 +11,7 @@ from app import __version__
 from app.api.router import api_router
 from app.api.routes.ws import router as ws_router
 from app.core.config import get_settings
+from app.core.cuda_runtime import ensure_cuda12_dll_path
 from app.core.hardware import detect_hardware
 from app.core.logging import configure_logging, get_logger
 from app.database.session import SessionLocal, init_db
@@ -18,6 +19,9 @@ from app.orchestrator.job_manager import job_manager
 from app.services.audio_studio import seed_audio_presets
 from app.services.recovery import recover_interrupted_jobs
 from app.services.seed import seed_subtitle_presets
+
+# Windows: expose CUDA 12 DLLs (pip nvidia-*-cu12 or Toolkit 12.x) before CT2 loads.
+ensure_cuda12_dll_path()
 
 logger = get_logger(__name__)
 

@@ -123,27 +123,6 @@ def _detect_ram_gb() -> float | None:
     return None
 
 
-def _find_cublas_dll() -> str | None:
-    """Return path to a cuBLAS 11/12 DLL if discoverable on Windows."""
-    if platform.system() != "Windows":
-        return None
-    names = ("cublas64_12.dll", "cublas64_11.dll", "cublas64_10.dll")
-    search_dirs: list[Path] = []
-    cuda_path = os.environ.get("CUDA_PATH") or os.environ.get("CUDA_HOME")
-    if cuda_path:
-        search_dirs.append(Path(cuda_path) / "bin")
-    path_env = os.environ.get("PATH", "")
-    for entry in path_env.split(os.pathsep):
-        if entry:
-            search_dirs.append(Path(entry))
-    for directory in search_dirs:
-        for name in names:
-            candidate = directory / name
-            if candidate.exists():
-                return str(candidate)
-    return None
-
-
 def _ctranslate2_cuda_usable() -> bool:
     """True only if CTranslate2 can actually see a CUDA device (libs loaded)."""
     try:
@@ -160,7 +139,8 @@ def _detect_nvidia() -> tuple[bool, str | None, float | None, list[str]]:
     Detect NVIDIA presence AND whether Faster-Whisper/CTranslate2 can use CUDA.
 
     nvidia-smi alone is not enough on Windows — missing cublas64_12.dll causes
-    RuntimeError during encode even when a GPU is installed.
+    RuntimeError during encode even when a GPU is installed. CUDA Toolkit 13.x
+    ships cublas64_13.dll, which does not satisfy CTranslate2's CUDA 12 wheels.
     """
     notes: list[str] = []
     nvidia_smi = shutil.which("nvidia-smi")
@@ -190,14 +170,19 @@ def _detect_nvidia() -> tuple[bool, str | None, float | None, list[str]]:
             except ValueError:
                 vram = None
 
-        # Runtime readiness for CTranslate2 / Faster-Whisper
-        cublas = _find_cublas_dll()
+        from app.core.cuda_runtime import ensure_cuda12_dll_path, find_cublas64_12
+
+        cuda_info = ensure_cuda12_dll_path()
+        cublas = find_cublas64_12()
         ct2_ok = _ctranslate2_cuda_usable()
         if platform.system() == "Windows" and not cublas:
-            notes.append(
+            hint = cuda_info.get("hint") or (
                 "NVIDIA GPU detected but cublas64_12.dll was not found. "
-                "Install CUDA Toolkit 12.x (or add its \\bin to PATH), or set Whisper device to CPU."
+                "CUDA 13.x is not enough — Faster-Whisper needs CUDA 12 libs. "
+                "pip install nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cuda-nvrtc-cu12 "
+                "or install CUDA Toolkit 12.x, or set Whisper device to CPU."
             )
+            notes.append(str(hint))
             return False, name, vram, notes
         if not ct2_ok:
             notes.append(
