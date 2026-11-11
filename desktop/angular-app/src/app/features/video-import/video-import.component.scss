@@ -1,0 +1,134 @@
+.import {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.dropzone {
+  position: relative;
+  display: flex;
+  min-height: 14rem;
+  cursor: pointer;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border-style: dashed;
+  padding: 2rem;
+  text-align: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dropzone--active {
+  border-color: color-mix(in srgb, var(--avc-accent) 70%, var(--avc-line));
+  background: color-mix(in srgb, var(--avc-accent) 8%, transparent);
+}
+
+.project-fields {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.banner {
+  border-radius: 0.9rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+}
+
+.banner--info {
+  border: 1px solid color-mix(in srgb, var(--avc-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--avc-accent) 10%, transparent);
+  color: var(--avc-accent);
+}
+
+.banner--error {
+  border: 1px solid color-mix(in srgb, #ff6b6b 45%, transparent);
+  background: color-mix(in srgb, #ff6b6b 12%, transparent);
+  color: #ffb4b4;
+}
+
+.job {
+  padding: 1.25rem;
+}
+
+.job__head {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.job__pct {
+  font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.job__bar {
+  margin-top: 1rem;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--avc-canvas);
+}
+
+.job__bar-fill {
+  height: 100%;
+  background: var(--avc-accent);
+  transition: width 0.2s ease;
+}
+
+.job__stages {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  font-size: 0.75rem;
+  color: var(--avc-muted);
+  padding: 0;
+  list-style: none;
+}
+
+.job__actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.clips {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.clip {
+  border-radius: 0.9rem;
+  border: 1px solid var(--avc-line);
+  background: color-mix(in srgb, var(--avc-canvas) 55%, transparent);
+  padding: 0.85rem;
+}
+
+.clip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.clip__score {
+  color: var(--avc-accent);
+  font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+  font-size: 1.15rem;
+}
+
+.hidden {
+  display: none;
+}
+
+.text-muted {
+  color: var(--avc-muted);
+}

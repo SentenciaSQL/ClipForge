@@ -1,0 +1,22 @@
+<div class="audio">
+  <button
+    type="button"
+    class="audio__option"
+    *ngFor="let mode of modes"
+    [class.audio__option--active]="config.mode === mode.key"
+    (click)="select($any(mode.key))"
+  >
+    <strong>{{ mode.label }}</strong>
+    <span>{{ mode.help }}</span>
+  </button>
+  <label>
+    <span class="avc-label">Notes for Audio Studio</span>
+    <textarea
+      class="avc-input mt-2"
+      rows="2"
+      [(ngModel)]="config.notes"
+      (ngModelChange)="emit()"
+      placeholder="Optional intent notes (music vibe, VO timing…)"
+    ></textarea>
+  </label>
+</div>

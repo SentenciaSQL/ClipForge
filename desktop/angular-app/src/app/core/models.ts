@@ -41,6 +41,8 @@ export interface SourceVideo {
   aspect_ratio: string | null;
   bitrate: number | null;
   status: string;
+  thumbnail_path?: string | null;
+  has_audio?: boolean;
   created_at: string;
   updated_at: string;
   metadata?: VideoMetadata | null;
@@ -352,4 +354,149 @@ export interface SubtitlePreset {
   slug: string;
   config: Record<string, unknown>;
   is_builtin: boolean;
+}
+
+export interface GenerationDurationConfig {
+  min_duration: number;
+  max_duration: number;
+  clip_count: number;
+  auto_clip_count: boolean;
+}
+
+export interface GenerationAnalysisConfig {
+  language: string | null;
+  whisper_model: string;
+  ollama_model: string | null;
+  force_retranscribe: boolean;
+  sensitivity: 'low' | 'medium' | 'high';
+  content_category: string;
+  auto_detect_content_type: boolean;
+}
+
+export interface GenerationAudioConfig {
+  mode: 'preserve' | 'remove' | 'replace' | 'music' | 'voiceover';
+  notes: string;
+}
+
+export interface GenerationConfiguration {
+  schema_version: number;
+  duration: GenerationDurationConfig;
+  subtitles: ClipConfiguration['subtitles'];
+  video: ClipConfiguration['video'];
+  reframe: ClipConfiguration['reframe'];
+  audio: GenerationAudioConfig;
+  export_audio: ClipConfiguration['audio'];
+  export: ClipConfiguration['export'];
+  analysis: GenerationAnalysisConfig;
+  profile_id?: string | null;
+  profile_slug?: string | null;
+}
+
+export interface GenerationConfigurationOut {
+  video_id: string;
+  configuration: GenerationConfiguration;
+  validation: {
+    ok: boolean;
+    errors: string[];
+    warnings: string[];
+    [key: string]: unknown;
+  };
+  summary: string[];
+}
+
+export interface GenerationProfile {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  config_json: GenerationConfiguration;
+  is_builtin: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function defaultSubtitleStyle(): SubtitleStyleConfig {
+  return {
+    font_family: 'Montserrat',
+    font_size: 64,
+    font_weight: 'bold',
+    text_color: '#FFFFFF',
+    highlight_color: '#FFE600',
+    outline_color: '#000000',
+    outline_width: 3,
+    shadow: 2,
+    opacity: 1,
+    alignment: 'center',
+    position: 'bottom',
+    custom_vertical: 0.85,
+    margin_h: 40,
+    max_chars_per_line: 28,
+    max_lines: 2,
+    animation: 'word',
+    uppercase: false,
+    safe_area: 'tiktok',
+  };
+}
+
+export function defaultGenerationConfiguration(): GenerationConfiguration {
+  return {
+    schema_version: 1,
+    duration: {
+      min_duration: 12,
+      max_duration: 30,
+      clip_count: 5,
+      auto_clip_count: false,
+    },
+    subtitles: {
+      enabled: true,
+      preset_slug: 'hormozi',
+      style: defaultSubtitleStyle(),
+      segments: null,
+    },
+    video: {
+      aspect_ratio: '9:16',
+      resolution_label: '1080p',
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      preserve_source_fps: false,
+      quality_preset: 'balanced',
+      crf: 18,
+      codec: 'h264',
+      encoder: 'auto',
+    },
+    reframe: {
+      mode: 'smart_crop',
+      background_color: '#000000',
+      focal_x: 0.5,
+      focal_y: 0.5,
+      enable_face_detection: true,
+      manual_crop: null,
+    },
+    audio: {
+      mode: 'preserve',
+      notes: '',
+    },
+    export_audio: {
+      codec: 'aac',
+      bitrate_kbps: 192,
+      volume: 1,
+    },
+    export: {
+      container: 'mp4',
+      filename_pattern: '{title}_{id8}',
+      output_directory: null,
+    },
+    analysis: {
+      language: null,
+      whisper_model: 'small',
+      ollama_model: null,
+      force_retranscribe: false,
+      sensitivity: 'medium',
+      content_category: 'auto',
+      auto_detect_content_type: true,
+    },
+    profile_id: null,
+    profile_slug: null,
+  };
 }

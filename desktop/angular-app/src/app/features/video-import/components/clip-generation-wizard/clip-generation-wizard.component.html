@@ -1,0 +1,132 @@
+<section class="wizard avc-panel">
+  <header class="wizard__header">
+    <div>
+      <div class="avc-label">Clip generation</div>
+      <h2 class="wizard__title">Configure before AI analysis</h2>
+      <p class="wizard__lead">
+        Import does not start processing. Review metadata, set options, then click Generate Clips.
+      </p>
+    </div>
+  </header>
+
+  <div *ngIf="error()" class="banner banner--error">{{ error() }}</div>
+  <div *ngIf="message()" class="banner banner--ok">{{ message() }}</div>
+
+  <ng-container *ngIf="step === 'configure'; else summaryStep">
+    <div class="wizard__profiles">
+      <label>
+        <span class="avc-label">Generation profile</span>
+        <select
+          class="avc-input mt-2"
+          [ngModel]="selectedProfileId"
+          (ngModelChange)="applyProfile($event)"
+        >
+          <option value="">Custom / none</option>
+          <option *ngFor="let profile of profiles()" [value]="profile.id">
+            {{ profile.name }}{{ profile.is_builtin ? '' : ' (custom)' }}
+          </option>
+        </select>
+      </label>
+      <div class="wizard__profile-actions">
+        <input
+          class="avc-input"
+          [(ngModel)]="newProfileName"
+          placeholder="Save current as custom profile"
+        />
+        <button type="button" class="avc-btn-ghost" (click)="saveAsProfile()">Save profile</button>
+      </div>
+      <div class="wizard__profile-list" *ngIf="profiles().length">
+        <div class="profile-row" *ngFor="let profile of profiles()">
+          <div>
+            <strong>{{ profile.name }}</strong>
+            <div class="text-muted text-xs">{{ profile.description || profile.slug }}</div>
+          </div>
+          <div class="profile-row__actions">
+            <button type="button" class="avc-btn-ghost" (click)="applyProfile(profile.id)">Use</button>
+            <button type="button" class="avc-btn-ghost" (click)="duplicateProfile(profile)">Duplicate</button>
+            <button
+              type="button"
+              class="avc-btn-ghost"
+              *ngIf="!profile.is_builtin"
+              (click)="deleteProfile(profile)"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <details class="section" [open]="isOpen('duration')" (toggle)="openSection = 'duration'">
+      <summary>A. Clip duration</summary>
+      <app-clip-duration-settings
+        [config]="config().duration"
+        [videoDuration]="video.duration_seconds"
+        (configChange)="patchConfig({ duration: $event })"
+      />
+    </details>
+
+    <details class="section" [open]="isOpen('subtitles')" (toggle)="openSection = 'subtitles'">
+      <summary>B. Subtitle configuration</summary>
+      <app-subtitle-settings
+        [config]="config().subtitles"
+        [presets]="subtitlePresets()"
+        (configChange)="patchConfig({ subtitles: $event })"
+      />
+    </details>
+
+    <details class="section" [open]="isOpen('format')" (toggle)="openSection = 'format'">
+      <summary>C–D. Video frame, resolution &amp; FPS</summary>
+      <app-video-format-settings
+        [config]="config().video"
+        [sourceWidth]="video.width"
+        [sourceHeight]="video.height"
+        (configChange)="patchConfig({ video: $event })"
+      />
+    </details>
+
+    <details class="section" [open]="isOpen('reframe')" (toggle)="openSection = 'reframe'">
+      <summary>E. Reframing mode</summary>
+      <app-reframing-settings
+        [config]="config().reframe"
+        (configChange)="patchConfig({ reframe: $event })"
+      />
+    </details>
+
+    <details class="section" [open]="isOpen('ai')" (toggle)="openSection = 'ai'">
+      <summary>F. AI analysis</summary>
+      <app-ai-analysis-settings
+        [config]="config().analysis"
+        (configChange)="patchConfig({ analysis: $event })"
+      />
+    </details>
+
+    <details class="section" [open]="isOpen('audio')" (toggle)="openSection = 'audio'">
+      <summary>G. Audio configuration</summary>
+      <app-audio-generation-settings
+        [config]="config().audio"
+        (configChange)="patchConfig({ audio: $event })"
+      />
+    </details>
+
+    <div class="wizard__footer">
+      <button type="button" class="avc-btn-ghost" (click)="saveConfiguration()" [disabled]="busy">
+        Save configuration
+      </button>
+      <button type="button" class="avc-btn-primary" (click)="goToSummary()" [disabled]="busy">
+        Review &amp; continue
+      </button>
+    </div>
+  </ng-container>
+
+  <ng-template #summaryStep>
+    <app-generation-configuration-summary
+      [summary]="summary()"
+      [warnings]="warnings()"
+      [errors]="errors()"
+      [busy]="busy"
+      (back)="backToConfigure()"
+      (generate)="confirmGenerate()"
+    />
+  </ng-template>
+</section>

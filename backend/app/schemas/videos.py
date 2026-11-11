@@ -42,6 +42,8 @@ class SourceVideoOut(ORMModel):
     aspect_ratio: str | None
     bitrate: int | None
     status: str
+    thumbnail_path: str | None = None
+    has_audio: bool = False
     created_at: datetime
     updated_at: datetime
     metadata: VideoMetadataOut | None = None
@@ -54,14 +56,17 @@ class VideoImportResponse(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
-    """Queue local analysis. Phase 2 executes through transcription."""
+    """Queue local analysis. Accepts legacy flat fields or full generation_config."""
 
     language: str | None = Field(default=None, description="ISO language code or null for auto")
     whisper_model: str | None = None
     ollama_model: str | None = None
     force: bool = Field(default=False, description="Ignore transcription cache and re-run Whisper")
     clip_count: int = Field(default=5, ge=1, le=50)
-    min_duration: int = Field(default=12, ge=12, le=30)
-    max_duration: int = Field(default=30, ge=12, le=60)
+    min_duration: int = Field(default=12, ge=1, le=120)
+    max_duration: int = Field(default=30, ge=1, le=180)
     subtitle_preset: str = "hormozi"
     reframing_mode: str = "auto"
+    burn_subtitles: bool | None = None
+    generation_config: dict[str, Any] | None = None
+    save_configuration: bool = True

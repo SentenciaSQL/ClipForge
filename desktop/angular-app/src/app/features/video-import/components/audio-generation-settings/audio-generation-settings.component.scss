@@ -1,0 +1,30 @@
+.audio {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.audio__option {
+  text-align: left;
+  border-radius: 1rem;
+  border: 1px solid var(--avc-line);
+  background: color-mix(in srgb, var(--avc-elevated) 80%, transparent);
+  padding: 0.85rem 1rem;
+  color: inherit;
+  cursor: pointer;
+}
+
+.audio__option strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.audio__option span {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--avc-muted);
+}
+
+.audio__option--active {
+  border-color: color-mix(in srgb, var(--avc-accent) 55%, var(--avc-line));
+  background: color-mix(in srgb, var(--avc-accent) 10%, var(--avc-elevated));
+}

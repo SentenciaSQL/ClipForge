@@ -34,10 +34,32 @@ Rules:
 """
 
 
-def _user_prompt(chunk: TranscriptChunk, min_seconds: int, max_seconds: int) -> str:
+_CONTENT_CATEGORY_HINTS: dict[str, str] = {
+    "educational": "Prefer clear explanations, definitions, and teachable takeaways.",
+    "storytelling": "Prefer narrative arcs, setups, and punchy story beats.",
+    "podcast": "Prefer conversational moments, guest reactions, and quotable dialogue.",
+    "interview": "Prefer Q&A exchanges, surprising answers, and strong guest statements.",
+    "gaming": "Prefer hype moments, reactions, clutch plays, and commentary peaks.",
+    "tutorial": "Prefer step-by-step instructions and actionable how-to segments.",
+    "humor": "Prefer jokes, punchlines, awkward beats, and laugh-out-loud moments.",
+    "opinions": "Prefer strong takes, debates, and contrarian viewpoints.",
+    "general": "Balance hooks, emotion, clarity, and standalone value.",
+    "auto": "Infer the content type from the transcript and adapt selection accordingly.",
+}
+
+
+def _user_prompt(
+    chunk: TranscriptChunk,
+    min_seconds: int,
+    max_seconds: int,
+    *,
+    content_category: str = "auto",
+) -> str:
+    hint = _CONTENT_CATEGORY_HINTS.get(content_category, _CONTENT_CATEGORY_HINTS["auto"])
     lines = [
         f"Window {chunk.index}: {chunk.start_seconds:.2f}s → {chunk.end_seconds:.2f}s",
         f"Target clip duration: {min_seconds}-{max_seconds} seconds.",
+        f"Content focus: {content_category}. {hint}",
         "Transcript segments:",
     ]
     for seg in chunk.segments:
@@ -86,9 +108,11 @@ class HighlightAnalyzer:
         min_seconds: int = 12,
         max_seconds: int = 30,
         video_duration: float | None = None,
+        content_category: str = "auto",
     ) -> list[RankedCandidate]:
         settings = get_settings()
         model_name = model or settings.ollama_model
+        category = (content_category or "auto").strip().lower() or "auto"
         if not self.client.is_available():
             raise OllamaError(
                 f"Ollama is not reachable at {self.client.base_url}. Start Ollama and pull {model_name}."
@@ -115,6 +139,7 @@ class HighlightAnalyzer:
                 model=model_name,
                 min_seconds=effective_min,
                 max_seconds=effective_max,
+                content_category=category,
             )
             for proposal in proposals:
                 snapped = snap_window(
@@ -191,11 +216,12 @@ class HighlightAnalyzer:
         model: str,
         min_seconds: int,
         max_seconds: int,
+        content_category: str = "auto",
     ) -> list[HighlightProposal]:
         payload = self.client.chat_json(
             model=model,
             system=SYSTEM_PROMPT,
-            user=_user_prompt(chunk, min_seconds, max_seconds),
+            user=_user_prompt(chunk, min_seconds, max_seconds, content_category=content_category),
             temperature=0.2,
         )
         if isinstance(payload, list):

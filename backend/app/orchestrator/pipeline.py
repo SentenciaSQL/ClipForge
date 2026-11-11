@@ -138,6 +138,9 @@ def run_analyze_job(job_id: str) -> None:
         max_duration = int(settings.get("max_duration") or 30)
         ollama_model = settings.get("ollama_model")
         subtitle_preset = settings.get("subtitle_preset") or "hormozi"
+        content_category = settings.get("content_category") or "auto"
+        if settings.get("auto_detect_content_type"):
+            content_category = "auto"
 
         stages = list(job.stages_json or [])
         job.status = "running"
@@ -299,6 +302,7 @@ def run_analyze_job(job_id: str) -> None:
                 min_seconds=min_duration,
                 max_seconds=max_duration,
                 video_duration=video.duration_seconds,
+                content_category=str(content_category),
             )
             # analyzer already returns selected/distinct; keep a scored pool = selected for persistence rank.
             raw_pool = list(selected)
@@ -342,7 +346,20 @@ def run_analyze_job(job_id: str) -> None:
                 candidates=raw_pool,
                 selected=selected,
                 subtitle_preset_slug=subtitle_preset,
+                reframing_mode=str(settings.get("reframing_mode") or "auto"),
             )
+            # Inherit the pre-generation wizard configuration onto every clip.
+            from app.schemas.generation_config import GenerationConfiguration
+            from app.services.generation_config import apply_generation_config_to_clips
+
+            raw_gen = settings.get("generation_config")
+            gen_cfg = None
+            if isinstance(raw_gen, dict):
+                try:
+                    gen_cfg = GenerationConfiguration.model_validate(raw_gen)
+                except Exception:  # noqa: BLE001
+                    gen_cfg = None
+            apply_generation_config_to_clips(db, video, clips, gen_cfg)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Highlight persistence failed for job %s", job_id)
             db.rollback()

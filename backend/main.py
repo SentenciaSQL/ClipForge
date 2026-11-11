@@ -18,6 +18,7 @@ from app.database.session import SessionLocal, init_db
 from app.orchestrator.job_manager import job_manager
 from app.services.audio_studio import seed_audio_presets
 from app.services.export_profiles import seed_export_profiles
+from app.services.generation_config import seed_generation_profiles
 from app.services.recovery import recover_interrupted_jobs
 from app.services.seed import seed_subtitle_presets
 
@@ -38,6 +39,7 @@ async def lifespan(_app: FastAPI):
         seed_subtitle_presets(db)
         seed_audio_presets(db)
         seed_export_profiles(db)
+        seed_generation_profiles(db)
         recovery = recover_interrupted_jobs(db)
         if recovery.get("interrupted_count"):
             logger.warning(
