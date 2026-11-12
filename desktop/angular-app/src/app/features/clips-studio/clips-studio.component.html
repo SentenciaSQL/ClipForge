@@ -143,6 +143,10 @@
           <a class="avc-btn-ghost" routerLink="/audio">Replace audio / subtitles</a>
         </div>
         <p class="text-xs text-accent mt-2">{{ playerLabel(clip) }}</p>
+        <p class="text-xs text-amber-300 mt-1" *ngIf="!hasRenderedMedia(clip)">
+          After replacing audio in Audio Studio, run <strong>Preview render</strong> here (or Render with mix)
+          so this player uses the new soundtrack — until then it plays the original source.
+        </p>
         <p class="text-xs text-muted mt-1">
           To swap the soundtrack: mute/upload in Audio Studio, then Use for subtitles so captions follow the new audio.
         </p>
@@ -251,7 +255,14 @@
             </div>
             <label class="text-sm block mt-3">
               <span class="avc-label">Edit subtitle text (optional override)</span>
-              <textarea class="avc-input mt-1 min-h-24" [(ngModel)]="subtitleOverrideText" (ngModelChange)="markDirty()"></textarea>
+              <textarea
+                class="avc-input mt-1 studio__subtitle-override"
+                rows="8"
+                [(ngModel)]="subtitleOverrideText"
+                (ngModelChange)="markDirty()"
+                placeholder="Paste or edit the full subtitle text for this clip…"
+              ></textarea>
+              <span class="text-xs text-muted mt-1 block">Drag the corner to resize.</span>
             </label>
           </ng-container>
         </div>

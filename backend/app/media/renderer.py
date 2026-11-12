@@ -228,22 +228,27 @@ def render_clip(
     uses_complex_video = "[" in reframe.filter_chain or ";" in reframe.filter_chain
     apply_mix = mix_plan is not None and bool(mix_plan.filter_complex)
 
-    # Input seek before -i for fast keyframe-accurate-enough trim; single encode pass.
+    # Seek + duration MUST both be input options on the source (-ss/-t before -i).
+    # When mix inputs follow, a lone -t after the first -i would attach to the
+    # replacement file instead of capping the video — that made 28s clips export
+    # at full remaining source length (often minutes).
+    dur = f"{max(0.05, float(duration_seconds)):.3f}"
     args = [
         ffmpeg,
         "-hide_banner",
         "-y",
         "-ss",
         f"{start_seconds:.3f}",
+        "-t",
+        dur,
         "-i",
         str(source_path),
-        "-t",
-        f"{duration_seconds:.3f}",
     ]
 
     if apply_mix:
         for extra in mix_plan.input_files:
-            args += ["-i", str(extra)]
+            # Cap each mix input to the clip window as well.
+            args += ["-t", dur, "-i", str(extra)]
 
     if uses_complex_video or apply_mix:
         if uses_complex_video:
@@ -294,6 +299,9 @@ def render_clip(
         "aac",
         "-b:a",
         f"{int(audio_bitrate_kbps)}k",
+        # Hard output duration + shortest stream — belt and suspenders with atrim.
+        "-t",
+        dur,
         "-shortest",
         "-movflags",
         "+faststart",

@@ -152,6 +152,15 @@
   color: var(--avc-muted);
 }
 
+.studio__subtitle-override {
+  min-height: 12rem;
+  width: 100%;
+  resize: both;
+  overflow: auto;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
 .studio__opacity {
   margin-top: 1rem;
   padding: 0.85rem 1rem;

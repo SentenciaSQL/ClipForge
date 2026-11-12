@@ -379,8 +379,10 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
           this.loadAudio();
           if (this.canTranscribe(track)) {
             this.message.set(
-              `Uploaded ${track.track_type}. Original audio was muted. Click “Use for subtitles” so captions match this audio.`
+              `Uploaded ${track.track_type}. Original muted and old preview cleared. Click “Use for subtitles”, then Preview/Render so the player uses this audio.`
             );
+          } else {
+            this.message.set('Audio track updated. Run Render with mix (or Preview render in Clips Studio) to hear it.');
           }
         },
         error: (err) => this.error.set(err?.error?.detail || 'Upload failed'),

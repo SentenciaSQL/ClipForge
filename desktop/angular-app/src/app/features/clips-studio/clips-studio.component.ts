@@ -150,9 +150,9 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
   }
 
   playerLabel(clip: Clip): string {
-    if (clip.output_path) return 'Playing exported clip';
-    if (clip.preview_path) return 'Playing preview render';
-    return 'Playing source segment (render a preview for final look)';
+    if (clip.output_path) return 'Playing exported clip (includes Audio Studio mix)';
+    if (clip.preview_path) return 'Playing preview render (includes Audio Studio mix)';
+    return 'Playing source video audio — click Preview render to hear replacement/VO mix';
   }
 
   previewVideoOpacity(clip: Clip): number {
