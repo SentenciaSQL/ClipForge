@@ -1,0 +1,18 @@
+{
+  "name": "Bold impact",
+  "slug": "bold-impact",
+  "font_family": "Impact",
+  "font_size": 78,
+  "primary_color": "#FFFFFF",
+  "highlight_color": "#EF4444",
+  "outline_color": "#000000",
+  "outline_width": 5,
+  "shadow": 1,
+  "position": "center",
+  "max_lines": 2,
+  "alignment": "center",
+  "word_highlight": true,
+  "animation_preset": "punch",
+  "uppercase": true,
+  "bold": true
+}

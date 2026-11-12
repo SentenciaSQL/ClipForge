@@ -23,8 +23,19 @@ def persist_highlights(
 ) -> tuple[list[Highlight], list[Clip]]:
     from app.ai.highlights.duration_clamp import clamp_clip_window
 
+    from sqlalchemy import or_
+
+    from app.services.full_video_clip import FULL_VIDEO_CATEGORY
+
     db.execute(delete(Highlight).where(Highlight.video_id == video.id))
-    db.execute(delete(Clip).where(Clip.video_id == video.id))
+    # Keep full-video dub/subtitle jobs; only replace highlight-derived clips.
+    # (NULL category must be deleted too — SQL != does not match NULL.)
+    db.execute(
+        delete(Clip).where(
+            Clip.video_id == video.id,
+            or_(Clip.category.is_(None), Clip.category != FULL_VIDEO_CATEGORY),
+        )
+    )
     db.flush()
 
     preset = db.scalar(select(SubtitlePreset).where(SubtitlePreset.slug == subtitle_preset_slug))

@@ -70,8 +70,18 @@ def patch_clip(clip_id: str, payload: PatchClipRequest, db: Session = Depends(ge
         if end <= start:
             raise HTTPException(status_code=400, detail="end_seconds must be greater than start_seconds")
         duration = end - start
-        # Keep edits in a short-form range (matches generation max of 180s).
-        if duration < 1 or duration > 180:
+        from app.services.full_video_clip import is_full_video_clip, max_render_seconds_for_clip
+        from app.services.videos import get_video
+
+        video = get_video(db, clip.video_id)
+        max_seconds = max_render_seconds_for_clip(clip, video)
+        # Short-form clips stay ≤180s; full-video dub jobs may use the whole source.
+        if duration < 1 or duration > max_seconds:
+            if is_full_video_clip(clip):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Full-video duration must stay between 1 and {int(max_seconds)} seconds",
+                )
             raise HTTPException(status_code=400, detail="Clip duration must stay between 1 and 180 seconds")
         clip.start_seconds = start
         clip.end_seconds = end

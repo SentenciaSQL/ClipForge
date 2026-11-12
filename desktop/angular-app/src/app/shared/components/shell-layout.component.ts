@@ -6,6 +6,7 @@ import {
   LucideFolderOpen,
   LucideLayoutDashboard,
   LucideLibrary,
+  LucideMic2,
   LucideSettings,
   LucideSparkles,
   LucideSubtitles,
@@ -26,6 +27,7 @@ import {
     LucideClapperboard,
     LucideSubtitles,
     LucideAudioLines,
+    LucideMic2,
     LucideLibrary,
     LucideSettings,
   ],
@@ -93,6 +95,14 @@ import {
           >
             <svg lucideAudioLines class="h-[18px] w-[18px]"></svg>
             <span>Audio Studio</span>
+          </a>
+          <a
+            routerLink="/dub"
+            routerLinkActive="bg-accentSoft/40 text-accent border-accent/30"
+            class="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm text-muted transition hover:border-line hover:text-ink"
+          >
+            <svg lucideMic2 class="h-[18px] w-[18px]"></svg>
+            <span>Full video dub</span>
           </a>
           <a
             routerLink="/exports"

@@ -12,6 +12,7 @@ import {
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { Subscription, switchMap, timer } from 'rxjs';
 
 import {
@@ -316,9 +317,11 @@ import { ApiService } from '../../core/services/api.service';
 })
 export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked {
   private readonly api = inject(ApiService);
+  private readonly route = inject(ActivatedRoute);
   private pollSub: Subscription | null = null;
   private paintedKey = '';
   private syncing = false;
+  private pendingClipId: string | null = null;
 
   @ViewChild('previewVideo') private previewVideo?: ElementRef<HTMLVideoElement>;
   @ViewChildren('previewAudio') private previewAudios!: QueryList<ElementRef<HTMLAudioElement>>;
@@ -341,8 +344,16 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
   readonly message = signal<string | null>(null);
 
   ngOnInit(): void {
+    const projectId = this.route.snapshot.queryParamMap.get('project');
+    this.pendingClipId = this.route.snapshot.queryParamMap.get('clip');
     this.api.listProjects().subscribe({
-      next: (projects) => this.projects.set(projects),
+      next: (projects) => {
+        this.projects.set(projects);
+        if (projectId) {
+          this.selectedProjectId = projectId;
+          this.loadClips();
+        }
+      },
       error: (err) => this.error.set(err?.message || 'Failed to load projects'),
     });
   }
@@ -535,7 +546,17 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
       return;
     }
     this.api.getProjectClips(this.selectedProjectId).subscribe({
-      next: (clips) => this.clips.set(clips),
+      next: (clips) => {
+        this.clips.set(clips);
+        const pending = this.pendingClipId
+          ? clips.find((clip) => clip.id === this.pendingClipId)
+          : null;
+        this.pendingClipId = null;
+        if (pending) {
+          this.selectedClipId = pending.id;
+          this.loadAudio();
+        }
+      },
       error: (err) => this.error.set(err?.error?.detail || 'Failed to load clips'),
     });
   }

@@ -60,6 +60,17 @@ export class ApiService {
     return this.http.delete<{ message: string }>(`${this.baseUrl}/projects/${id}`);
   }
 
+  createFullVideoClip(
+    videoId: string,
+    subtitlePreset = 'hormozi'
+  ): Observable<{ clip: Clip; project_id: string; video_id: string; message: string }> {
+    const params = new URLSearchParams({ subtitle_preset: subtitlePreset });
+    return this.http.post<{ clip: Clip; project_id: string; video_id: string; message: string }>(
+      `${this.baseUrl}/videos/${videoId}/full-clip?${params.toString()}`,
+      {}
+    );
+  }
+
   listVideos(projectId?: string): Observable<SourceVideo[]> {
     const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
     return this.http.get<SourceVideo[]>(`${this.baseUrl}/videos${query}`);
