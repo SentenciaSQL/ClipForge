@@ -18,7 +18,11 @@ def persist_highlights(
     selected: list[RankedCandidate],
     subtitle_preset_slug: str = "hormozi",
     reframing_mode: str = "auto",
+    min_duration: float = 12.0,
+    max_duration: float = 30.0,
 ) -> tuple[list[Highlight], list[Clip]]:
+    from app.ai.highlights.duration_clamp import clamp_clip_window
+
     db.execute(delete(Highlight).where(Highlight.video_id == video.id))
     db.execute(delete(Clip).where(Clip.video_id == video.id))
     db.flush()
@@ -26,14 +30,26 @@ def persist_highlights(
     preset = db.scalar(select(SubtitlePreset).where(SubtitlePreset.slug == subtitle_preset_slug))
     highlight_rows: list[Highlight] = []
     selected_keys = {(round(c.start_seconds, 3), round(c.end_seconds, 3)) for c in selected}
+    video_duration = float(video.duration_seconds) if video.duration_seconds else None
 
     for rank_index, candidate in enumerate(sorted(candidates, key=lambda c: c.score, reverse=True), start=1):
         is_selected = (round(candidate.start_seconds, 3), round(candidate.end_seconds, 3)) in selected_keys
+        clamped = clamp_clip_window(
+            candidate.start_seconds,
+            candidate.end_seconds,
+            min_seconds=float(min_duration),
+            max_seconds=float(max_duration),
+            video_duration=video_duration,
+        )
+        if clamped is None:
+            continue
+        start, end = clamped
+        duration = round(end - start, 3)
         row = Highlight(
             video_id=video.id,
-            start_seconds=candidate.start_seconds,
-            end_seconds=candidate.end_seconds,
-            duration_seconds=candidate.duration_seconds,
+            start_seconds=start,
+            end_seconds=end,
+            duration_seconds=duration,
             transcript=candidate.transcript,
             hook=candidate.hook,
             category=candidate.category,

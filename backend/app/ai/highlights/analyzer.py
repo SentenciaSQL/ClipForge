@@ -236,6 +236,8 @@ class HighlightAnalyzer:
         max_seconds: int,
         content_category: str = "auto",
     ) -> list[HighlightProposal]:
+        from app.ai.highlights.duration_clamp import clamp_clip_window
+
         payload = self.client.chat_json(
             model=model,
             system=SYSTEM_PROMPT,
@@ -254,6 +256,9 @@ class HighlightAnalyzer:
                 return []
             raw_items = [item.model_dump() for item in batch.candidates]
 
+        # Seeds may be short; snap expands them. Hard-reject only absurdly long LLM windows
+        # (then clamp remaining overshoots down to max_seconds).
+        max_seed = max(float(max_seconds) * 2.0, float(max_seconds) + 15.0)
         valid: list[HighlightProposal] = []
         for raw in raw_items:
             try:
@@ -262,12 +267,22 @@ class HighlightAnalyzer:
                 logger.warning("Skipping invalid highlight candidate in chunk %s: %s", chunk.index, exc)
                 continue
             duration = item.end_seconds - item.start_seconds
-            # Allow short seeds; snap_window expands into the 12–30s target range.
-            if duration < 2 or duration > 60:
+            if duration < 2 or duration > max_seed:
                 continue
             # Must intersect the current chunk window.
             if item.end_seconds < chunk.start_seconds or item.start_seconds > chunk.end_seconds:
                 continue
+            if duration > float(max_seconds):
+                clamped = clamp_clip_window(
+                    item.start_seconds,
+                    item.end_seconds,
+                    min_seconds=float(min_seconds),
+                    max_seconds=float(max_seconds),
+                    video_duration=chunk.end_seconds,
+                )
+                if clamped is None:
+                    continue
+                item.start_seconds, item.end_seconds = clamped
             valid.append(item)
         return valid
 
