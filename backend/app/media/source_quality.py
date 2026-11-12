@@ -274,6 +274,8 @@ def assess_source_quality(
     aspect_key: str = "9:16",
     allow_upscale: bool = False,
     content_hint: str | None = None,
+    requested_width: int | None = None,
+    requested_height: int | None = None,
 ) -> SourceQualityAssessment:
     meta = metadata
     if meta is None and path is not None:
@@ -330,12 +332,32 @@ def assess_source_quality(
     if rotation:
         limitations.append(f"Rotation metadata detected ({rotation}°); display size uses upright frame.")
 
-    native_dims = dimensions_for_aspect(aspect_key, resolution_label="1080p")
-    if not allow_upscale and (native_dims[0] > canvas_w or native_dims[1] > canvas_h):
+    # Only warn when the *active* canvas is oversized — not when the user already
+    # applied the adaptive recommendation (that used to spam 1080p forever).
+    req_w = int(requested_width) if requested_width else None
+    req_h = int(requested_height) if requested_height else None
+    if (
+        not allow_upscale
+        and req_w
+        and req_h
+        and (req_w > canvas_w + 2 or req_h > canvas_h + 2)
+    ):
         warnings.append(
-            f"Default 1080p canvas ({native_dims[0]}x{native_dims[1]}) exceeds what this source can support. "
-            f"Recommended canvas: {canvas_w}x{canvas_h} ({res_label})."
+            f"Selected canvas ({req_w}x{req_h}) exceeds what this source can support. "
+            f"Recommended canvas: {canvas_w}x{canvas_h} ({res_label}). "
+            f"Turn on Automatic quality or click “Apply adaptive recommendation”."
         )
+    elif (
+        not allow_upscale
+        and req_w is None
+        and req_h is None
+    ):
+        native_dims = dimensions_for_aspect(aspect_key, resolution_label="1080p")
+        if native_dims[0] > canvas_w or native_dims[1] > canvas_h:
+            warnings.append(
+                f"Default 1080p canvas ({native_dims[0]}x{native_dims[1]}) exceeds what this source can support. "
+                f"Recommended canvas: {canvas_w}x{canvas_h} ({res_label})."
+            )
 
     recommendations = {
         "aspect_ratio": aspect_key,

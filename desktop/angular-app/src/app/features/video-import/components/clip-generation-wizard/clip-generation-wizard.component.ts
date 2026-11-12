@@ -120,9 +120,26 @@ export class ClipGenerationWizardComponent implements OnChanges {
         aspect_ratio: cfg.video.aspect_ratio,
         allow_upscale: Boolean(cfg.video.allow_upscale),
         content_hint: cfg.analysis.content_category,
+        requested_width: cfg.video.width,
+        requested_height: cfg.video.height,
       })
       .subscribe({
-        next: (quality) => this.sourceQuality.set(quality),
+        next: (quality) => {
+          this.sourceQuality.set(quality);
+          // If auto quality is on and canvas is still oversized, apply recommendation.
+          const rec = quality.recommendations || {};
+          const recW = Number(rec['width'] || 0);
+          const recH = Number(rec['height'] || 0);
+          if (
+            cfg.video.auto_quality &&
+            !cfg.video.allow_upscale &&
+            recW > 0 &&
+            recH > 0 &&
+            (cfg.video.width > recW + 2 || cfg.video.height > recH + 2)
+          ) {
+            this.applyAdaptiveRecommendation();
+          }
+        },
         error: () => undefined,
       });
   }
