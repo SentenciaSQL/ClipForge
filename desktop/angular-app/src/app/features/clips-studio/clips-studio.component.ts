@@ -1,6 +1,7 @@
 import { DecimalPipe, NgFor, NgIf } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { Subscription, switchMap, timer } from 'rxjs';
 
 import {
@@ -18,7 +19,7 @@ import { ApiService } from '../../core/services/api.service';
 @Component({
   selector: 'app-clips-studio',
   standalone: true,
-  imports: [NgIf, NgFor, FormsModule, DecimalPipe],
+  imports: [NgIf, NgFor, FormsModule, DecimalPipe, RouterLink],
   templateUrl: './clips-studio.component.html',
   styleUrl: './clips-studio.component.scss',
 })

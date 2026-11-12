@@ -34,7 +34,8 @@ import { ApiService } from '../../core/services/api.service';
         <div class="avc-label">Sound</div>
         <h1 class="avc-title mt-1">Audio Studio</h1>
         <p class="mt-2 max-w-2xl text-sm text-muted">
-          Mix tracks with real waveform timelines, ducking, and loudnorm. Changes apply on the next render.
+          Mute or remove the original track, upload the audio you want, then generate subtitles from that
+          audio so captions match what viewers hear. Changes apply on the next render.
         </p>
       </header>
 
@@ -59,6 +60,9 @@ import { ApiService } from '../../core/services/api.service';
 
       <div *ngIf="error()" class="rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
         {{ error() }}
+      </div>
+      <div *ngIf="message()" class="rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
+        {{ message() }}
       </div>
       <div *ngIf="job()" class="avc-panel p-4 text-sm">
         {{ job()?.status }} · {{ job()?.message }} · {{ job()?.progress | number: '1.0-0' }}%
@@ -127,15 +131,20 @@ import { ApiService } from '../../core/services/api.service';
 
         <section class="space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <h2 class="font-display text-lg font-semibold">Tracks</h2>
+            <div>
+              <h2 class="font-display text-lg font-semibold">Tracks</h2>
+              <p class="text-xs text-muted mt-1">
+                Tip: set type to Replacement, upload your file (original mutes automatically), then Use for subtitles.
+              </p>
+            </div>
             <div class="flex flex-wrap gap-2 items-center">
               <select class="avc-input" [(ngModel)]="uploadType">
-                <option value="music">Music</option>
-                <option value="voiceover">Voice-over</option>
                 <option value="replacement">Replacement</option>
+                <option value="voiceover">Voice-over</option>
+                <option value="music">Music</option>
               </select>
               <label class="avc-btn-ghost cursor-pointer">
-                Upload
+                Upload audio
                 <input type="file" class="hidden" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" (change)="onUpload($event)" />
               </label>
             </div>
@@ -146,8 +155,20 @@ import { ApiService } from '../../core/services/api.service';
               <div>
                 <div class="avc-label">{{ track.track_type }}</div>
                 <div class="font-medium">{{ track.label }}</div>
+                <p class="text-xs text-accent mt-1" *ngIf="track.track_type === 'original' && track.muted">
+                  Original muted — replacement/VO will be heard on render.
+                </p>
               </div>
-              <div class="flex gap-2" *ngIf="track.track_type !== 'original'">
+              <div class="flex flex-wrap gap-2" *ngIf="track.track_type !== 'original'">
+                <button
+                  class="avc-btn-primary text-xs"
+                  type="button"
+                  *ngIf="canTranscribe(track)"
+                  (click)="useForSubtitles(track)"
+                  [disabled]="busy()"
+                >
+                  Use for subtitles
+                </button>
                 <button class="avc-btn-ghost text-xs" type="button" (click)="removeTrack(track)">Remove</button>
               </div>
             </div>
@@ -236,7 +257,8 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
   selectedProjectId = '';
   selectedClipId = '';
   presetSlug = '';
-  uploadType = 'music';
+  uploadType = 'replacement';
+  readonly message = signal<string | null>(null);
 
   ngOnInit(): void {
     this.api.listProjects().subscribe({
@@ -336,21 +358,48 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
     });
   }
 
+  canTranscribe(track: AudioTrack): boolean {
+    return Boolean(track.source_path) && (track.track_type === 'replacement' || track.track_type === 'voiceover');
+  }
+
   onUpload(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file || !this.selectedClipId) return;
+    this.error.set(null);
+    this.message.set(null);
     this.api
       .uploadAudioTrack(this.selectedClipId, this.uploadType, file, {
         ducking_enabled: this.uploadType === 'music',
         volume: this.uploadType === 'music' ? 0.35 : 1,
       })
       .subscribe({
-        next: () => {
+        next: (track) => {
           input.value = '';
           this.loadAudio();
+          if (this.canTranscribe(track)) {
+            this.message.set(
+              `Uploaded ${track.track_type}. Original audio was muted. Click “Use for subtitles” so captions match this audio.`
+            );
+          }
         },
         error: (err) => this.error.set(err?.error?.detail || 'Upload failed'),
+      });
+  }
+
+  useForSubtitles(track: AudioTrack): void {
+    if (!this.selectedClipId || !this.canTranscribe(track)) return;
+    this.busy.set(true);
+    this.error.set(null);
+    this.message.set(null);
+    this.api
+      .transcribeTrackForSubtitles(this.selectedClipId, track.id, { mute_original: true })
+      .subscribe({
+        next: (job) => this.pollJob(job, 'Subtitles aligned to your uploaded audio. Render to burn them in.'),
+        error: (err) => {
+          this.busy.set(false);
+          this.error.set(err?.error?.detail || 'Failed to queue subtitle transcription');
+        },
       });
   }
 
@@ -358,31 +407,37 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
     if (!this.selectedClipId) return;
     this.busy.set(true);
     this.error.set(null);
+    this.message.set(null);
     this.api.renderClip(this.selectedClipId, { burn_subtitles: true }).subscribe({
-      next: (job) => {
-        this.job.set(job);
-        this.pollSub?.unsubscribe();
-        this.pollSub = timer(0, 1500)
-          .pipe(switchMap(() => this.api.getJob(job.id)))
-          .subscribe({
-            next: (updated) => {
-              this.job.set(updated);
-              if (['completed', 'failed', 'cancelled'].includes(updated.status)) {
-                this.busy.set(false);
-                this.pollSub?.unsubscribe();
-                this.pollSub = null;
-                if (updated.status === 'failed') {
-                  this.error.set(updated.error || 'Render failed');
-                }
-              }
-            },
-          });
-      },
+      next: (job) => this.pollJob(job, 'Render finished with the current audio mix and subtitles.'),
       error: (err) => {
         this.busy.set(false);
         this.error.set(err?.error?.detail || 'Failed to queue render');
       },
     });
+  }
+
+  private pollJob(job: ProcessingJob, successMessage: string): void {
+    this.job.set(job);
+    this.pollSub?.unsubscribe();
+    this.pollSub = timer(0, 1500)
+      .pipe(switchMap(() => this.api.getJob(job.id)))
+      .subscribe({
+        next: (updated) => {
+          this.job.set(updated);
+          if (['completed', 'failed', 'cancelled'].includes(updated.status)) {
+            this.busy.set(false);
+            this.pollSub?.unsubscribe();
+            this.pollSub = null;
+            if (updated.status === 'failed') {
+              this.error.set(updated.error || 'Job failed');
+            } else if (updated.status === 'completed') {
+              this.message.set(updated.message || successMessage);
+              this.loadAudio();
+            }
+          }
+        },
+      });
   }
 
   private paintWaveforms(): void {

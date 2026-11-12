@@ -341,6 +341,17 @@ export class ApiService {
     return this.http.post<AudioTrack>(`${this.baseUrl}/clips/${clipId}/audio-tracks`, form);
   }
 
+  transcribeTrackForSubtitles(
+    clipId: string,
+    trackId: string,
+    body: { language?: string; whisper_model?: string; mute_original?: boolean } = {}
+  ): Observable<ProcessingJob> {
+    return this.http.post<ProcessingJob>(
+      `${this.baseUrl}/clips/${clipId}/audio-tracks/${trackId}/transcribe-for-subtitles`,
+      body
+    );
+  }
+
   listSubtitlePresets(): Observable<SubtitlePreset[]> {
     return this.http.get<SubtitlePreset[]>(`${this.baseUrl}/subtitle-presets`);
   }

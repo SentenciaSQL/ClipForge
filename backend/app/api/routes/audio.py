@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.database.models import Clip
+from app.database.models import AudioTrack, Clip, ProcessingJob
+from app.orchestrator.job_manager import job_manager
 from app.schemas.audio import (
     ApplyAudioPresetRequest,
     AudioMixSettings,
@@ -16,9 +20,19 @@ from app.schemas.audio import (
     AudioTrackUpdate,
 )
 from app.schemas.common import MessageResponse
+from app.schemas.jobs import ProcessingJobOut
 from app.services import audio_studio as audio_service
 
 router = APIRouter()
+
+
+class TranscribeTrackRequest(BaseModel):
+    language: str | None = None
+    whisper_model: str | None = None
+    mute_original: bool = Field(
+        default=True,
+        description="Mute the original track so the uploaded speech drives the mix.",
+    )
 
 
 def _track_out(track) -> AudioTrackOut:
@@ -141,3 +155,76 @@ def remove_track(track_id: str, db: Session = Depends(get_db)) -> MessageRespons
         status_code = 400 if "Cannot delete" in str(exc) else 404
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     return MessageResponse(message="Track deleted")
+
+
+@router.post(
+    "/clips/{clip_id}/audio-tracks/{track_id}/transcribe-for-subtitles",
+    response_model=ProcessingJobOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def transcribe_track_for_subtitles(
+    clip_id: str,
+    track_id: str,
+    payload: TranscribeTrackRequest | None = None,
+    db: Session = Depends(get_db),
+) -> ProcessingJobOut:
+    """
+    Mute original dialogue (optional) and re-transcribe the uploaded track so
+    burned-in subtitles match the audio the viewer will hear.
+    """
+    body = payload or TranscribeTrackRequest()
+    clip = db.get(Clip, clip_id)
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+    track = db.get(AudioTrack, track_id)
+    if not track or track.clip_id != clip.id:
+        raise HTTPException(status_code=404, detail="Audio track not found")
+    if track.track_type not in {"replacement", "voiceover"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload a Replacement or Voice-over track first, then use it for subtitles",
+        )
+    if not track.source_path:
+        raise HTTPException(status_code=400, detail="Track has no audio file")
+
+    if body.mute_original:
+        for item in audio_service.list_tracks(db, clip.id):
+            if item.track_type == "original" and not item.muted:
+                item.muted = True
+                item.volume = 0.0
+        audio_cfg = dict(clip.audio_config or {})
+        audio_cfg["generation_audio_mode"] = (
+            "replace" if track.track_type == "replacement" else "voiceover"
+        )
+        clip.audio_config = audio_cfg
+        db.commit()
+
+    job = ProcessingJob(
+        project_id=clip.project_id,
+        video_id=clip.video_id,
+        clip_id=clip.id,
+        job_type="clip_audio_transcribe",
+        status="queued",
+        current_stage="queued",
+        progress=0.0,
+        message="Queued: transcribe uploaded audio for subtitles",
+        stages_json=[
+            {"stage": "audio_extraction", "status": "pending"},
+            {"stage": "transcription", "status": "pending"},
+            {"stage": "subtitle_alignment", "status": "pending"},
+        ],
+        result_json={
+            "settings": {
+                "track_id": track.id,
+                "language": body.language,
+                "whisper_model": body.whisper_model,
+                "mute_original": body.mute_original,
+            }
+        },
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    job_manager.submit_clip_audio_transcribe(job.id)
+    return ProcessingJobOut.model_validate(job)

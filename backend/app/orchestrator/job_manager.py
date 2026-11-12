@@ -93,6 +93,11 @@ class JobManager:
 
         return self.submit(job_id, lambda: run_diarize_job(job_id))
 
+    def submit_clip_audio_transcribe(self, job_id: str) -> Future[None]:
+        from app.orchestrator.clip_audio_pipeline import run_clip_audio_transcribe_job
+
+        return self.submit(job_id, lambda: run_clip_audio_transcribe_job(job_id))
+
     def shutdown(self, wait: bool = False) -> None:
         self._executor.shutdown(wait=wait, cancel_futures=True)
 

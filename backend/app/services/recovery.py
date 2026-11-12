@@ -51,9 +51,16 @@ def retry_job(db: Session, job_id: str) -> ProcessingJob:
         raise ValueError(f"Job status '{original.status}' is not retryable")
     if original.job_type in {"analyze", "transcribe", "diarize"} and not original.video_id:
         raise ValueError("Cannot retry this job without video_id")
-    if original.job_type == "render" and not original.clip_id:
-        raise ValueError("Cannot retry render job without clip_id")
-    if original.job_type not in {"analyze", "transcribe", "render", "batch_export", "diarize"}:
+    if original.job_type in {"render", "clip_audio_transcribe"} and not original.clip_id:
+        raise ValueError("Cannot retry this job without clip_id")
+    if original.job_type not in {
+        "analyze",
+        "transcribe",
+        "render",
+        "batch_export",
+        "diarize",
+        "clip_audio_transcribe",
+    }:
         raise ValueError(f"Unsupported job type for retry: {original.job_type}")
 
     clone = ProcessingJob(
@@ -81,6 +88,8 @@ def retry_job(db: Session, job_id: str) -> ProcessingJob:
         job_manager.submit_batch_export(clone.id)
     elif clone.job_type == "diarize":
         job_manager.submit_diarize(clone.id)
+    elif clone.job_type == "clip_audio_transcribe":
+        job_manager.submit_clip_audio_transcribe(clone.id)
     else:
         raise ValueError(f"Unsupported job type for retry: {clone.job_type}")
     return clone

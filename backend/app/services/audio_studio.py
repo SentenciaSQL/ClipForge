@@ -172,6 +172,23 @@ def create_track(
         metadata_json=metadata,
     )
     db.add(track)
+
+    # Replacement / voice-over implies the original dialogue is no longer the speech source.
+    if payload.track_type in {"replacement", "voiceover"}:
+        original = db.scalar(
+            select(AudioTrack).where(AudioTrack.clip_id == clip.id, AudioTrack.track_type == "original")
+        )
+        if original and not original.muted:
+            original.muted = True
+            if payload.track_type == "replacement":
+                original.volume = 0.0
+        audio_cfg = dict(clip.audio_config or {})
+        if payload.track_type == "replacement":
+            audio_cfg["generation_audio_mode"] = "replace"
+        elif audio_cfg.get("generation_audio_mode") in {None, "preserve"}:
+            audio_cfg["generation_audio_mode"] = "voiceover"
+        clip.audio_config = audio_cfg
+
     db.commit()
     db.refresh(track)
     return track
