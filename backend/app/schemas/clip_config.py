@@ -73,6 +73,13 @@ class SubtitleStyleConfig(BaseModel):
     animation: SubtitleAnimation = "word"
     uppercase: bool = False
     safe_area: Literal["none", "tiktok", "reels", "shorts"] = "tiktok"
+    # Opaque caption box behind text (ASS BorderStyle=3).
+    box_enabled: bool = False
+    box_color: str = "#000000"
+    box_opacity: float = Field(default=0.55, ge=0.0, le=1.0)
+    italic: bool = False
+    all_caps_words: bool = False  # legacy alias; prefer uppercase
+    letter_spacing: float = Field(default=0.0, ge=0.0, le=10.0)
 
 
 class SubtitleConfig(BaseModel):
@@ -80,6 +87,8 @@ class SubtitleConfig(BaseModel):
     preset_slug: str = "hormozi"
     style: SubtitleStyleConfig = Field(default_factory=SubtitleStyleConfig)
     segments: list[SubtitleSegmentOverride] | None = None
+    # Shift burned-in captions later (+) or earlier (−) in seconds.
+    timing_offset_seconds: float = Field(default=0.0, ge=-120.0, le=120.0)
 
 
 class ManualCrop(BaseModel):

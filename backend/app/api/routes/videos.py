@@ -116,6 +116,36 @@ def remove_video(video_id: str, db: Session = Depends(get_db)) -> MessageRespons
     return MessageResponse(message="Video deleted")
 
 
+@router.post("/videos/{video_id}/full-clip", status_code=status.HTTP_201_CREATED)
+def create_full_video_clip(
+    video_id: str,
+    subtitle_preset: str = "hormozi",
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Create (or refresh) a whole-video clip for replacing audio and burning
+    subtitles without running highlight / short-clip generation.
+    """
+    from app.schemas.highlights import ClipOut
+    from app.services.full_video_clip import upsert_full_video_clip
+    from app.services.highlights import clip_to_out
+
+    video = get_video(db, video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    try:
+        clip = upsert_full_video_clip(db, video, subtitle_preset_slug=subtitle_preset)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    out: ClipOut = clip_to_out(clip)
+    return {
+        "clip": out.model_dump(mode="json"),
+        "project_id": video.project_id,
+        "video_id": video.id,
+        "message": "Full-video job ready — open Audio Studio to replace audio, then Clips Studio for subtitles.",
+    }
+
+
 @router.post("/videos/{video_id}/analyze", response_model=ProcessingJobOut)
 def analyze_video(
     video_id: str,

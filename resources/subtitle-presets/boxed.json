@@ -1,0 +1,21 @@
+{
+  "name": "Boxed caption",
+  "slug": "boxed",
+  "font_family": "Inter",
+  "font_size": 56,
+  "primary_color": "#FFFFFF",
+  "highlight_color": "#FDE047",
+  "outline_color": "#000000",
+  "outline_width": 0,
+  "shadow": 0,
+  "position": "bottom",
+  "max_lines": 2,
+  "alignment": "center",
+  "word_highlight": false,
+  "animation_preset": "fade",
+  "uppercase": false,
+  "bold": true,
+  "box_enabled": true,
+  "box_color": "#000000",
+  "box_opacity": 0.65
+}

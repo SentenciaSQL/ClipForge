@@ -48,6 +48,13 @@ export const routes: Routes = [
           import('./features/audio-studio/audio-studio.component').then((m) => m.AudioStudioComponent),
       },
       {
+        path: 'dub',
+        loadComponent: () =>
+          import('./features/full-video-studio/full-video-studio.component').then(
+            (m) => m.FullVideoStudioComponent
+          ),
+      },
+      {
         path: 'exports',
         loadComponent: () =>
           import('./features/export-library/export-library.component').then(

@@ -227,6 +227,11 @@ export interface SubtitleStyleConfig {
   animation: string;
   uppercase: boolean;
   safe_area: 'none' | 'tiktok' | 'reels' | 'shorts';
+  box_enabled?: boolean;
+  box_color?: string;
+  box_opacity?: number;
+  italic?: boolean;
+  letter_spacing?: number;
 }
 
 export interface ClipConfiguration {
@@ -236,6 +241,8 @@ export interface ClipConfiguration {
     preset_slug: string;
     style: SubtitleStyleConfig;
     segments?: { text: string; start: number; end: number }[] | null;
+    /** Shift burned-in captions later (+) or earlier (−), seconds. */
+    timing_offset_seconds?: number;
   };
   video: {
     aspect_ratio: string;
@@ -469,6 +476,11 @@ export function defaultSubtitleStyle(): SubtitleStyleConfig {
     animation: 'word',
     uppercase: false,
     safe_area: 'tiktok',
+    box_enabled: false,
+    box_color: '#000000',
+    box_opacity: 0.55,
+    italic: false,
+    letter_spacing: 0,
   };
 }
 
@@ -486,6 +498,7 @@ export function defaultGenerationConfiguration(): GenerationConfiguration {
       preset_slug: 'hormozi',
       style: defaultSubtitleStyle(),
       segments: null,
+      timing_offset_seconds: 0,
     },
     video: {
       aspect_ratio: '9:16',

@@ -1,7 +1,7 @@
 import { DecimalPipe, NgFor, NgIf } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription, switchMap, timer } from 'rxjs';
 
 import {
@@ -25,7 +25,9 @@ import { ApiService } from '../../core/services/api.service';
 })
 export class ClipsStudioComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly route = inject(ActivatedRoute);
   private pollSub: Subscription | null = null;
+  private pendingClipId: string | null = null;
 
   readonly Math = Math;
   readonly videos = signal<SourceVideo[]>([]);
@@ -40,6 +42,20 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
+  readonly fontChoices = [
+    'Montserrat',
+    'Inter',
+    'Arial',
+    'Helvetica',
+    'Impact',
+    'Georgia',
+    'Roboto',
+    'Oswald',
+    'Poppins',
+    'Bebas Neue',
+    'Comic Sans MS',
+    'DejaVu Sans',
+  ];
 
   selectedVideoId = '';
   selectedIds = new Set<string>();
@@ -53,8 +69,16 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
   readonly manualCropKeys = ['x', 'y', 'width', 'height'] as const;
 
   ngOnInit(): void {
+    this.pendingClipId = this.route.snapshot.queryParamMap.get('clip');
+    const videoId = this.route.snapshot.queryParamMap.get('video');
     this.api.listVideos().subscribe({
-      next: (videos) => this.videos.set(videos),
+      next: (videos) => {
+        this.videos.set(videos);
+        if (videoId) {
+          this.selectedVideoId = videoId;
+          this.loadClips();
+        }
+      },
       error: (err) => this.error.set(err?.message || 'Failed to load videos'),
     });
     this.api.listSubtitlePresets().subscribe({
@@ -83,9 +107,12 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
     this.api.getVideoClips(this.selectedVideoId).subscribe({
       next: (clips) => {
         this.clips.set(clips);
-        if (clips.length) {
-          this.selectClip(clips[0]);
-        }
+        if (!clips.length) return;
+        const pending = this.pendingClipId
+          ? clips.find((clip) => clip.id === this.pendingClipId)
+          : null;
+        this.pendingClipId = null;
+        this.selectClip(pending || clips[0]);
       },
       error: (err) => this.error.set(err?.error?.detail || err?.message || 'Failed to load clips'),
     });
@@ -221,15 +248,22 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
       style['highlight_color'] || cfg.subtitles.style.highlight_color
     );
     cfg.subtitles.style.outline_color = String(style['outline_color'] || cfg.subtitles.style.outline_color);
-    cfg.subtitles.style.outline_width = Number(style['outline_width'] || cfg.subtitles.style.outline_width);
-    cfg.subtitles.style.shadow = Number(style['shadow'] || cfg.subtitles.style.shadow);
+    cfg.subtitles.style.outline_width = Number(style['outline_width'] ?? cfg.subtitles.style.outline_width);
+    cfg.subtitles.style.shadow = Number(style['shadow'] ?? cfg.subtitles.style.shadow);
     cfg.subtitles.style.position = (style['position'] as typeof cfg.subtitles.style.position) || 'bottom';
     cfg.subtitles.style.max_lines = Number(style['max_lines'] || cfg.subtitles.style.max_lines);
     cfg.subtitles.style.alignment =
       (style['alignment'] as typeof cfg.subtitles.style.alignment) || cfg.subtitles.style.alignment;
     cfg.subtitles.style.uppercase = Boolean(style['uppercase']);
+    cfg.subtitles.style.italic = Boolean(style['italic']);
     cfg.subtitles.style.font_weight = style['bold'] ? 'bold' : 'normal';
     cfg.subtitles.style.animation = String(style['animation_preset'] || cfg.subtitles.style.animation);
+    cfg.subtitles.style.box_enabled = Boolean(style['box_enabled']);
+    if (style['box_color']) cfg.subtitles.style.box_color = String(style['box_color']);
+    if (style['box_opacity'] != null) cfg.subtitles.style.box_opacity = Number(style['box_opacity']);
+    if (style['letter_spacing'] != null) {
+      cfg.subtitles.style.letter_spacing = Number(style['letter_spacing']);
+    }
     this.config.set({ ...cfg });
     this.markDirty();
   }
@@ -237,6 +271,9 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
   private buildPatch(): Record<string, unknown> {
     const cfg = this.config();
     if (!cfg) return {};
+    if (cfg.subtitles.timing_offset_seconds == null || Number.isNaN(Number(cfg.subtitles.timing_offset_seconds))) {
+      cfg.subtitles.timing_offset_seconds = 0;
+    }
     if (this.subtitleOverrideText.trim()) {
       const duration = Math.max(0.5, this.editEnd - this.editStart);
       cfg.subtitles.segments = [

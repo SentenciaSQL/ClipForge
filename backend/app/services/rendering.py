@@ -162,6 +162,13 @@ def render_clip_asset(
     else:
         words = _words_for_clip(transcription)
 
+    # Shift captions later (+) / earlier (−) for sync with replaced audio.
+    timing_offset = float(getattr(cfg.subtitles, "timing_offset_seconds", 0.0) or 0.0)
+    if abs(timing_offset) > 0.001:
+        for word in words:
+            word["start"] = float(word.get("start", 0.0)) + timing_offset
+            word["end"] = float(word.get("end", word["start"])) + timing_offset
+
     temp_dir = video_temp_dir(video.id) / ("previews" if preview else "renders") / clip.id
     temp_dir.mkdir(parents=True, exist_ok=True)
     ass_path = temp_dir / "subtitles.ass"
@@ -182,13 +189,15 @@ def render_clip_asset(
         enable_faces = False
 
     from app.ai.highlights.duration_clamp import resolved_clip_duration
+    from app.services.full_video_clip import is_full_video_clip, max_render_seconds_for_clip
 
     # Never trust a stale/overlong duration_seconds alone — prefer end-start and hard-cap.
+    # Full-video dub/subtitle jobs may exceed the short-form 180s ceiling.
     render_duration = resolved_clip_duration(
         start_seconds=float(clip.start_seconds),
         end_seconds=float(clip.end_seconds),
         duration_seconds=float(clip.duration_seconds) if clip.duration_seconds is not None else None,
-        max_seconds=180.0,
+        max_seconds=max_render_seconds_for_clip(clip, video),
     )
     if abs(float(clip.duration_seconds or 0) - render_duration) > 0.05:
         clip.duration_seconds = render_duration

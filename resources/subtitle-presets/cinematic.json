@@ -1,0 +1,19 @@
+{
+  "name": "Cinematic",
+  "slug": "cinematic",
+  "font_family": "Georgia",
+  "font_size": 52,
+  "primary_color": "#F5F5F4",
+  "highlight_color": "#E7E5E4",
+  "outline_color": "#1C1917",
+  "outline_width": 2,
+  "shadow": 3,
+  "position": "bottom",
+  "max_lines": 2,
+  "alignment": "center",
+  "word_highlight": false,
+  "animation_preset": "fade",
+  "uppercase": false,
+  "bold": false,
+  "italic": true
+}
