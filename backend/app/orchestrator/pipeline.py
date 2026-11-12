@@ -361,6 +361,8 @@ def run_analyze_job(job_id: str) -> None:
                 selected=selected,
                 subtitle_preset_slug=subtitle_preset,
                 reframing_mode=str(settings.get("reframing_mode") or "auto"),
+                min_duration=float(min_duration),
+                max_duration=float(max_duration),
             )
             # Inherit the pre-generation wizard configuration onto every clip.
             from app.schemas.generation_config import GenerationConfiguration

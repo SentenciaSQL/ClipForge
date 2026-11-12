@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.ai.highlights.duration_clamp import clamp_clip_window
+
 
 def _segment_text(segments: list[dict[str, Any]], start: float, end: float) -> str:
     parts = [
@@ -36,21 +38,16 @@ def snap_window(
     """
     if not segments:
         # Pure duration clamp when there are no transcript anchors.
-        if video_duration is None or video_duration <= 0:
+        clamped = clamp_clip_window(
+            start,
+            end,
+            min_seconds=min_seconds,
+            max_seconds=max_seconds,
+            video_duration=video_duration,
+        )
+        if clamped is None:
             return None
-        start = max(0.0, float(start))
-        end = max(start + 0.1, float(end))
-        if end - start < min_seconds:
-            end = min(video_duration, start + min_seconds)
-            if end - start < min_seconds:
-                start = max(0.0, end - min_seconds)
-        if end - start > max_seconds:
-            end = start + max_seconds
-        end = min(video_duration, end)
-        duration = end - start
-        if duration < min(min_seconds, video_duration) - 0.25:
-            return None
-        return start, end, ""
+        return clamped[0], clamped[1], ""
 
     ordered = sorted(segments, key=lambda s: float(s.get("start", 0)))
     max_end = video_duration if video_duration is not None else float(ordered[-1].get("end", end))
@@ -81,8 +78,12 @@ def snap_window(
     while duration < min_seconds and (start_idx > 0 or end_idx < len(ordered) - 1):
         can_left = start_idx > 0
         can_right = end_idx < len(ordered) - 1
-        # Prefer expanding toward more content; allow exceeding max briefly then shrink.
-        if can_right and (not can_left or (float(ordered[end_idx]["end"]) - snapped_start) <= max_seconds + 1.0):
+        # Never expand right if the next segment end would blow past max_seconds.
+        next_right_ok = False
+        if can_right:
+            prospective = float(ordered[end_idx + 1]["end"]) - snapped_start
+            next_right_ok = prospective <= max_seconds + 0.05
+        if can_right and next_right_ok and (not can_left or duration < min_seconds):
             end_idx += 1
             snapped_end = float(ordered[end_idx]["end"])
         elif can_left:
@@ -123,9 +124,18 @@ def snap_window(
 
     snapped_start = max(0.0, snapped_start)
     snapped_end = min(max_end, snapped_end)
-    duration = snapped_end - snapped_start
-    if duration < min_seconds - 0.25 or duration > max_seconds + 0.5:
+
+    # Hard wall-clock clamp — never return a 3–8 minute window for a 12–30s target.
+    clamped = clamp_clip_window(
+        snapped_start,
+        snapped_end,
+        min_seconds=min_seconds,
+        max_seconds=max_seconds,
+        video_duration=max_end,
+    )
+    if clamped is None:
         return None
+    snapped_start, snapped_end = clamped
 
     text = _segment_text(ordered, snapped_start, snapped_end)
     if min_words > 0:

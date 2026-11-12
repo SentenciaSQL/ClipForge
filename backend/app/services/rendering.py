@@ -181,10 +181,23 @@ def render_clip_asset(
     if cfg.reframe.mode in {"gaming", "tutorial", "educational"}:
         enable_faces = False
 
+    from app.ai.highlights.duration_clamp import resolved_clip_duration
+
+    # Never trust a stale/overlong duration_seconds alone — prefer end-start and hard-cap.
+    render_duration = resolved_clip_duration(
+        start_seconds=float(clip.start_seconds),
+        end_seconds=float(clip.end_seconds),
+        duration_seconds=float(clip.duration_seconds) if clip.duration_seconds is not None else None,
+        max_seconds=180.0,
+    )
+    if abs(float(clip.duration_seconds or 0) - render_duration) > 0.05:
+        clip.duration_seconds = render_duration
+        clip.end_seconds = float(clip.start_seconds) + render_duration
+
     reframe = plan_reframe_for_clip(
         source,
         start_seconds=float(clip.start_seconds),
-        duration_seconds=float(clip.duration_seconds),
+        duration_seconds=render_duration,
         source_width=video.width,
         source_height=video.height,
         output_width=cfg.video.width,
@@ -220,7 +233,7 @@ def render_clip_asset(
         source_path=source,
         output_path=output_path,
         start_seconds=float(clip.start_seconds),
-        duration_seconds=float(clip.duration_seconds),
+        duration_seconds=render_duration,
         reframe=reframe,
         ass_path=ass_path if burn else None,
         burn_subtitles=burn,
