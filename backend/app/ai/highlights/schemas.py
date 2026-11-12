@@ -94,10 +94,21 @@ def normalize_highlight_category(value: Any) -> HighlightCategory:
     return "general"
 
 
+_SCORE_ALIASES: dict[str, tuple[str, ...]] = {
+    "hook_strength": ("hook_score", "hook_power", "hookiness"),
+    "content_value": ("value", "content_score", "usefulness"),
+    "emotional_engagement": ("engagement", "emotion", "emotional", "emotional_score"),
+    "message_clarity": ("clarity", "clearness", "message_clear"),
+    "segment_independence": ("independence", "standalone", "self_contained"),
+    "ending_quality": ("ending", "close", "closer", "payoff"),
+}
+
+
 class HighlightProposal(BaseModel):
     start_seconds: float = Field(ge=0)
     end_seconds: float = Field(ge=0)
-    hook: str = Field(min_length=1)
+    # Default so LLM responses that omit hook still validate.
+    hook: str = Field(default="Highlight moment", min_length=1)
     category: HighlightCategory = "general"
     description: str = ""
     reason: str = ""
@@ -121,11 +132,12 @@ class HighlightProposal(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _coerce_timestamps(cls, value: Any) -> Any:
-        """Normalize common LLM shape quirks (duration instead of end, aliases)."""
+    def _coerce_llm_shape(cls, value: Any) -> Any:
+        """Normalize common LLM shape quirks (missing hook/end, score aliases)."""
         if not isinstance(value, dict):
             return value
         data = dict(value)
+
         if "start_seconds" not in data:
             for key in ("start", "begin", "begin_seconds", "from"):
                 if key in data:
@@ -144,6 +156,43 @@ class HighlightProposal(BaseModel):
                     data["end_seconds"] = float(start) + float(duration)
             except (TypeError, ValueError):
                 pass
+
+        hook = data.get("hook")
+        if hook is None or str(hook).strip() == "":
+            for key in (
+                "title",
+                "headline",
+                "hook_text",
+                "hook_line",
+                "summary",
+                "text",
+                "quote",
+                "description",
+                "reason",
+            ):
+                alt = data.get(key)
+                if alt is not None and str(alt).strip():
+                    data["hook"] = str(alt).strip()
+                    break
+            else:
+                start = data.get("start_seconds")
+                end = data.get("end_seconds")
+                try:
+                    if start is not None and end is not None:
+                        data["hook"] = f"Moment {float(start):.0f}s–{float(end):.0f}s"
+                    else:
+                        data["hook"] = "Highlight moment"
+                except (TypeError, ValueError):
+                    data["hook"] = "Highlight moment"
+
+        for canonical, aliases in _SCORE_ALIASES.items():
+            if canonical in data and data[canonical] is not None:
+                continue
+            for alias in aliases:
+                if alias in data and data[alias] is not None:
+                    data[canonical] = data[alias]
+                    break
+
         return data
 
     @field_validator("end_seconds")

@@ -43,3 +43,29 @@ def test_proposal_accepts_start_end_aliases():
     assert item.end_seconds == 25
     assert item.hook == "Highlight moment"
     assert item.category == "advice"
+
+
+def test_proposal_accepts_missing_hook_and_score_aliases():
+    item = HighlightProposal.model_validate(
+        {
+            "start_seconds": 288.94,
+            "end_seconds": 305.0,
+            "category": "story",
+            "engagement": 90,
+            "clarity": 85,
+        }
+    )
+    assert item.hook.startswith("Moment 289")
+    assert item.emotional_engagement == 90
+    assert item.message_clarity == 85
+
+
+def test_proposal_uses_title_when_hook_missing():
+    item = HighlightProposal.model_validate(
+        {
+            "start_seconds": 10,
+            "end_seconds": 25,
+            "title": "You won't believe this",
+        }
+    )
+    assert item.hook == "You won't believe this"
