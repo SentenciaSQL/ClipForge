@@ -105,6 +105,24 @@
             </div>
           </div>
         </div>
+        <div class="studio__opacity" *ngIf="config() as cfg">
+          <label class="studio__opacity-label">
+            <span class="avc-label">Video opacity</span>
+            <span class="studio__opacity-value">{{ ((cfg.video.opacity ?? 1) * 100) | number: '1.0-0' }}%</span>
+          </label>
+          <input
+            class="studio__opacity-slider"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            [ngModel]="cfg.video.opacity ?? 1"
+            (ngModelChange)="setVideoOpacity($event)"
+          />
+          <p class="text-xs text-muted mt-1">
+            Lowers the picture only — subtitles stay fully opaque. Save + Preview/Export to bake it in.
+          </p>
+        </div>
         <div class="studio__timeline">
           <label class="text-sm">
             <span class="avc-label">Start (s)</span>
@@ -141,7 +159,7 @@
       <div class="studio__sidebar avc-panel" *ngIf="config() as cfg">
         <div class="studio__tabs">
           <button type="button" [class.active]="tab === 'subtitles'" (click)="tab = 'subtitles'">Subtitles</button>
-          <button type="button" [class.active]="tab === 'video'" (click)="tab = 'video'">Frame</button>
+          <button type="button" [class.active]="tab === 'video'" (click)="tab = 'video'">Frame / opacity</button>
           <button type="button" [class.active]="tab === 'reframe'" (click)="tab = 'reframe'">Reframe</button>
           <button type="button" [class.active]="tab === 'export'" (click)="tab = 'export'">Export</button>
           <button type="button" [class.active]="tab === 'profiles'" (click)="tab = 'profiles'">Profiles</button>
