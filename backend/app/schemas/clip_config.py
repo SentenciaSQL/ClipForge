@@ -116,6 +116,8 @@ class VideoConfig(BaseModel):
     auto_quality: bool = True
     allow_upscale: bool = False
     ai_upscale: bool = False
+    # Applied to the picture only (before ASS burn-in) so captions stay fully opaque.
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class AudioExportConfig(BaseModel):

@@ -251,6 +251,8 @@ export interface ClipConfiguration {
     auto_quality?: boolean;
     allow_upscale?: boolean;
     ai_upscale?: boolean;
+    /** Picture opacity 0–1; applied before subtitle burn-in. */
+    opacity?: number;
   };
   reframe: {
     mode: string;
@@ -499,6 +501,7 @@ export function defaultGenerationConfiguration(): GenerationConfiguration {
       auto_quality: true,
       allow_upscale: false,
       ai_upscale: false,
+      opacity: 1,
     },
     reframe: {
       mode: 'auto',
