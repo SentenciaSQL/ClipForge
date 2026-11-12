@@ -12,9 +12,8 @@ Todas las capturas se tomaron de la UI real.
 ```powershell
 cd C:\Users\PC\Documents\python\ClipForge
 
-# Si falla por "not digitally signed", usa Bypass o cambia la política:
-# Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-powershell -ExecutionPolicy Bypass -File .\scripts\Start-Dev.ps1
+# Usa .cmd (no falla por ExecutionPolicy). No uses solo .ps1 si Windows lo bloquea.
+.\scripts\Start-Dev.cmd
 ```
 
 Sin scripts (dos terminales):
@@ -37,7 +36,7 @@ npm start
 ### Modo desktop (instalador)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Build-Release.ps1
+.\scripts\Build-Release.cmd
 explorer .\desktop\angular-app\src-tauri\target\release\bundle\nsis
 ```
 

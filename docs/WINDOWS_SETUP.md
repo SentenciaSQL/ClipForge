@@ -16,15 +16,17 @@ Target: Windows 11 with optional NVIDIA CUDA + Ollama.
 
 ## PowerShell execution policy
 
-If scripts fail with *not digitally signed* / `PSSecurityException`:
+If `.\scripts\Start-Dev.ps1` fails with *not digitally signed*, use the **`.cmd`** wrappers (recommended):
 
 ```powershell
-# Once per Windows user (recommended)
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+.\scripts\Setup-Dev.cmd
+.\scripts\Start-Dev.cmd
+```
 
-# Or bypass for a single run
-powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Dev.ps1
-powershell -ExecutionPolicy Bypass -File .\scripts\Start-Dev.ps1
+Or once per Windows user:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
 You can also skip scripts and use the manual commands in the [README](../README.md#manual-start-no-scripts).
@@ -33,7 +35,7 @@ You can also skip scripts and use the manual commands in the [README](../README.
 
 ```powershell
 cd C:\Users\PC\Documents\python\ClipForge
-powershell -ExecutionPolicy Bypass -File .\scripts\Verify-Environment.ps1
+.\scripts\Verify-Environment.cmd
 ```
 
 ## Environment (`.env`)
@@ -58,7 +60,7 @@ AVC_OLLAMA_MODEL=qwen3:8b
 ## Setup
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Setup-Dev.ps1
+.\scripts\Setup-Dev.cmd
 ```
 
 This creates `backend\.venv`, installs Python deps, and installs Angular npm packages.
@@ -67,8 +69,7 @@ Apply database migrations:
 
 ```powershell
 cd backend
-.\.venv\Scripts\Activate.ps1
-alembic upgrade head
+.\.venv\Scripts\python.exe -m alembic upgrade head
 cd ..
 ```
 
@@ -81,7 +82,7 @@ ollama pull qwen3:8b
 ## Start development
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Start-Dev.ps1
+.\scripts\Start-Dev.cmd
 ```
 
 Or separately (no script / no Bypass needed for `python` / `npm`):
@@ -91,21 +92,12 @@ Or separately (no script / no Bypass needed for `python` / `npm`):
 cd C:\Users\PC\Documents\python\ClipForge
 if (-not (Test-Path .\.env)) { Copy-Item .\.env.example .\.env }
 cd backend
-.\.venv\Scripts\Activate.ps1
-alembic upgrade head
-python main.py
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe main.py
 
 # Terminal 2 — Angular
 cd C:\Users\PC\Documents\python\ClipForge\desktop\angular-app
 npm start
-```
-
-If `Activate.ps1` is also blocked:
-
-```powershell
-cd C:\Users\PC\Documents\python\ClipForge\backend
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe main.py
 ```
 
 ## Tauri desktop window
