@@ -66,11 +66,12 @@ def _user_prompt(
         lines.append(f"[{seg['start']:.2f}-{seg['end']:.2f}] {seg['text']}")
     lines.append(
         "Respond with JSON object:"
-        '{"candidates":[{"start_seconds":0,"end_seconds":0,"hook":"",'
+        '{"candidates":[{"start_seconds":0,"end_seconds":0,"hook":"short punchy title (REQUIRED)",'
         '"category":"hook|story|advice|educational|controversial|emotional|funny|revelation|qa|conclusion|memorable|general",'
         '"description":"","reason":"","hook_strength":0,"content_value":0,'
         '"emotional_engagement":0,"message_clarity":0,"segment_independence":0,"ending_quality":0}]}'
     )
+    lines.append("Every candidate MUST include hook, start_seconds, and end_seconds.")
     lines.append(
         "Return 1-5 candidates for this window. Spoken words are optional — "
         "music/rhythm/visual moments are valid. Only return an empty array if the window is unusable."
