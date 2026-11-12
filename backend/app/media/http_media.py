@@ -14,6 +14,14 @@ _MEDIA_TYPES = {
     ".webm": "video/webm",
     ".mkv": "video/x-matroska",
     ".avi": "video/x-msvideo",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+    ".oga": "audio/ogg",
+    ".flac": "audio/flac",
+    ".opus": "audio/opus",
 }
 
 

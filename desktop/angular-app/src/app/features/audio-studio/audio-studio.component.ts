@@ -6,6 +6,7 @@ import {
   OnDestroy,
   OnInit,
   QueryList,
+  ViewChild,
   ViewChildren,
   inject,
   signal,
@@ -35,7 +36,8 @@ import { ApiService } from '../../core/services/api.service';
         <h1 class="avc-title mt-1">Audio Studio</h1>
         <p class="mt-2 max-w-2xl text-sm text-muted">
           Mute or remove the original track, upload the audio you want, then generate subtitles from that
-          audio so captions match what viewers hear. Changes apply on the next render.
+          audio so captions match what viewers hear. Use the live preview below to play video + new audio
+          together before rendering.
         </p>
       </header>
 
@@ -69,6 +71,78 @@ import { ApiService } from '../../core/services/api.service';
       </div>
 
       <ng-container *ngIf="state() as studio">
+        <section class="avc-panel p-5 space-y-4" *ngIf="selectedClip() as clip">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div class="avc-label">Live mix preview</div>
+              <h2 class="font-display text-lg font-semibold mt-1">{{ clip.hook || clip.title || 'Clip' }}</h2>
+              <p class="text-xs text-muted mt-1">
+                Plays the clip picture with your current track mix (mute / volume / offset). No render needed.
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="avc-btn-primary" type="button" (click)="togglePreview()">
+                {{ previewPlaying() ? 'Pause' : 'Play preview' }}
+              </button>
+              <button class="avc-btn-ghost" type="button" (click)="restartPreview()">Restart</button>
+            </div>
+          </div>
+
+          <div class="grid gap-4 lg:grid-cols-[minmax(0,280px)_1fr] items-start">
+            <div class="overflow-hidden rounded-xl border border-line bg-black/40">
+              <video
+                #previewVideo
+                class="block w-full max-h-[420px] bg-black"
+                playsinline
+                preload="auto"
+                [muted]="videoMuted()"
+                [src]="previewVideoUrl(clip)"
+                (timeupdate)="onPreviewTimeUpdate()"
+                (play)="onPreviewPlay()"
+                (pause)="onPreviewPause()"
+                (ended)="onPreviewEnded()"
+                (seeked)="syncAudiosToVideo()"
+              ></video>
+            </div>
+            <div class="space-y-3 text-sm">
+              <div class="text-xs text-muted">
+                {{ previewClock() }} / {{ studio.duration_seconds | number: '1.1-1' }}s
+                · {{ previewStatusLabel() }}
+              </div>
+              <input
+                class="w-full accent-[var(--avc-accent,#38bdf8)]"
+                type="range"
+                min="0"
+                [max]="studio.duration_seconds"
+                step="0.05"
+                [ngModel]="previewPosition()"
+                (ngModelChange)="seekPreview($event)"
+              />
+              <ul class="space-y-1 text-xs text-muted">
+                <li *ngFor="let track of audiblePreviewTracks()">
+                  {{ track.label }} · vol {{ track.volume | number: '1.2-2' }}
+                  <span *ngIf="track.offset_seconds"> · offset {{ track.offset_seconds | number: '1.1-1' }}s</span>
+                </li>
+                <li *ngIf="!audiblePreviewTracks().length && videoMuted()">
+                  No audible tracks — unmute original or upload replacement/VO/music.
+                </li>
+                <li *ngIf="!videoMuted()">Original dialogue comes from the video soundtrack.</li>
+              </ul>
+              <p class="text-xs text-muted">
+                Ducking / loudnorm still need Render. This preview is for timing and balance.
+              </p>
+            </div>
+          </div>
+
+          <audio
+            *ngFor="let track of previewableTracks()"
+            #previewAudio
+            preload="auto"
+            [attr.data-track-id]="track.id"
+            [src]="audioUrl(track)"
+          ></audio>
+        </section>
+
         <section class="avc-panel p-5 space-y-4">
           <div class="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -134,7 +208,8 @@ import { ApiService } from '../../core/services/api.service';
             <div>
               <h2 class="font-display text-lg font-semibold">Tracks</h2>
               <p class="text-xs text-muted mt-1">
-                Tip: set type to Replacement, upload your file (original mutes automatically), then Use for subtitles.
+                Tip: set type to Replacement, upload your file (original mutes automatically), hit Play preview to
+                hear it with the video, then Use for subtitles.
               </p>
             </div>
             <div class="flex flex-wrap gap-2 items-center">
@@ -243,7 +318,10 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
   private readonly api = inject(ApiService);
   private pollSub: Subscription | null = null;
   private paintedKey = '';
+  private syncing = false;
 
+  @ViewChild('previewVideo') private previewVideo?: ElementRef<HTMLVideoElement>;
+  @ViewChildren('previewAudio') private previewAudios!: QueryList<ElementRef<HTMLAudioElement>>;
   @ViewChildren('waveCanvas') private waveCanvases!: QueryList<ElementRef<HTMLCanvasElement>>;
 
   readonly projects = signal<Project[]>([]);
@@ -253,6 +331,8 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
   readonly job = signal<ProcessingJob | null>(null);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
+  readonly previewPlaying = signal(false);
+  readonly previewPosition = signal(0);
 
   selectedProjectId = '';
   selectedClipId = '';
@@ -269,16 +349,187 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
 
   ngOnDestroy(): void {
     this.pollSub?.unsubscribe();
+    this.pausePreviewMedia();
   }
 
   ngAfterViewChecked(): void {
     this.paintWaveforms();
+    this.applyTrackVolumes();
+  }
+
+  selectedClip(): Clip | null {
+    return this.clips().find((clip) => clip.id === this.selectedClipId) || null;
+  }
+
+  videoMuted(): boolean {
+    const original = this.state()?.tracks.find((track) => track.track_type === 'original');
+    if (!original) return true;
+    return Boolean(original.muted) || Number(original.volume || 0) <= 0.001;
+  }
+
+  previewableTracks(): AudioTrack[] {
+    return (this.state()?.tracks || []).filter(
+      (track) => track.track_type !== 'original' && Boolean(track.source_path) && !track.muted
+    );
+  }
+
+  audiblePreviewTracks(): AudioTrack[] {
+    return this.previewableTracks().filter((track) => Number(track.volume || 0) > 0.001);
+  }
+
+  previewVideoUrl(clip: Clip): string {
+    const start = Math.max(0, Number(clip.start_seconds || 0));
+    const end = Math.max(start + 0.1, Number(clip.end_seconds || start + (clip.duration_seconds || 1)));
+    return `${this.api.videoMediaUrl(clip.video_id)}#t=${start.toFixed(2)},${end.toFixed(2)}`;
+  }
+
+  audioUrl(track: AudioTrack): string {
+    const stamp = `${track.created_at || ''}:${track.volume}:${track.offset_seconds}:${track.muted}`;
+    return `${this.api.audioTrackMediaUrl(track.id)}?t=${encodeURIComponent(stamp)}`;
+  }
+
+  previewStatusLabel(): string {
+    if (this.previewPlaying()) return 'Playing live mix';
+    if (this.audiblePreviewTracks().length) return 'Ready — video + uploaded audio';
+    if (!this.videoMuted()) return 'Ready — original video audio';
+    return 'Ready — muted';
+  }
+
+  previewClock(): string {
+    return `${this.previewPosition().toFixed(1)}s`;
+  }
+
+  togglePreview(): void {
+    const video = this.previewVideo?.nativeElement;
+    if (!video) return;
+    if (video.paused) {
+      void this.playPreview();
+    } else {
+      this.pausePreviewMedia();
+    }
+  }
+
+  async playPreview(): Promise<void> {
+    const video = this.previewVideo?.nativeElement;
+    const clip = this.selectedClip();
+    if (!video || !clip) return;
+    this.ensureVideoInClipWindow(video, clip);
+    this.syncAudiosToVideo(true);
+    try {
+      await video.play();
+      await this.playAudios();
+      this.previewPlaying.set(true);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Could not start preview playback');
+      this.previewPlaying.set(false);
+    }
+  }
+
+  restartPreview(): void {
+    const video = this.previewVideo?.nativeElement;
+    const clip = this.selectedClip();
+    if (!video || !clip) return;
+    const start = Math.max(0, Number(clip.start_seconds || 0));
+    video.currentTime = start;
+    this.previewPosition.set(0);
+    this.syncAudiosToVideo(true);
+    void this.playPreview();
+  }
+
+  seekPreview(relativeSeconds: number | string): void {
+    const video = this.previewVideo?.nativeElement;
+    const clip = this.selectedClip();
+    const studio = this.state();
+    if (!video || !clip || !studio) return;
+    const duration = Math.max(0.1, Number(studio.duration_seconds || clip.duration_seconds || 1));
+    const rel = Math.max(0, Math.min(duration, Number(relativeSeconds) || 0));
+    const start = Math.max(0, Number(clip.start_seconds || 0));
+    video.currentTime = start + rel;
+    this.previewPosition.set(rel);
+    this.syncAudiosToVideo(true);
+  }
+
+  onPreviewTimeUpdate(): void {
+    const video = this.previewVideo?.nativeElement;
+    const clip = this.selectedClip();
+    const studio = this.state();
+    if (!video || !clip || !studio) return;
+    const start = Math.max(0, Number(clip.start_seconds || 0));
+    const end = Math.max(start + 0.1, Number(clip.end_seconds || start + studio.duration_seconds));
+    if (video.currentTime >= end - 0.05) {
+      video.pause();
+      this.pauseAudios();
+      this.previewPlaying.set(false);
+      this.previewPosition.set(studio.duration_seconds);
+      return;
+    }
+    this.previewPosition.set(Math.max(0, video.currentTime - start));
+    this.syncAudiosToVideo();
+  }
+
+  onPreviewPlay(): void {
+    this.previewPlaying.set(true);
+    void this.playAudios();
+  }
+
+  onPreviewPause(): void {
+    this.previewPlaying.set(false);
+    this.pauseAudios();
+  }
+
+  onPreviewEnded(): void {
+    this.previewPlaying.set(false);
+    this.pauseAudios();
+  }
+
+  syncAudiosToVideo(forceSeek = false): void {
+    const video = this.previewVideo?.nativeElement;
+    const clip = this.selectedClip();
+    if (!video || !clip || this.syncing) return;
+    this.syncing = true;
+    try {
+      const start = Math.max(0, Number(clip.start_seconds || 0));
+      const clipTime = Math.max(0, video.currentTime - start);
+      const byId = new Map((this.state()?.tracks || []).map((track) => [track.id, track]));
+      this.previewAudios?.forEach((ref) => {
+        const audio = ref.nativeElement;
+        const trackId = audio.getAttribute('data-track-id') || '';
+        const track = byId.get(trackId);
+        if (!track) return;
+        audio.volume = Math.max(0, Math.min(1, Number(track.volume || 0)));
+        audio.muted = Boolean(track.muted) || audio.volume <= 0.001;
+        const offset = Number(track.offset_seconds || 0);
+        const target = Math.max(0, clipTime - offset);
+        if (clipTime < offset - 0.02) {
+          if (!audio.paused) audio.pause();
+          if (forceSeek || Math.abs(audio.currentTime) > 0.05) audio.currentTime = 0;
+          return;
+        }
+        if (forceSeek || Math.abs(audio.currentTime - target) > 0.25) {
+          try {
+            audio.currentTime = target;
+          } catch {
+            /* ignore seek race while metadata loads */
+          }
+        }
+        if (!video.paused && audio.paused && !audio.muted) {
+          void audio.play().catch(() => undefined);
+        }
+        if ((video.paused || audio.muted) && !audio.paused) {
+          audio.pause();
+        }
+      });
+    } finally {
+      this.syncing = false;
+    }
   }
 
   loadClips(): void {
     this.selectedClipId = '';
     this.state.set(null);
     this.waveforms.set(null);
+    this.pausePreviewMedia();
+    this.previewPosition.set(0);
     if (!this.selectedProjectId) {
       this.clips.set([]);
       return;
@@ -290,6 +541,8 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
   }
 
   loadAudio(): void {
+    this.pausePreviewMedia();
+    this.previewPosition.set(0);
     if (!this.selectedClipId) {
       this.state.set(null);
       this.waveforms.set(null);
@@ -346,6 +599,8 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
         });
         this.paintedKey = '';
         this.paintWaveforms();
+        this.applyTrackVolumes();
+        this.syncAudiosToVideo(true);
       },
       error: (err) => this.error.set(err?.error?.detail || 'Failed to update track'),
     });
@@ -379,10 +634,12 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
           this.loadAudio();
           if (this.canTranscribe(track)) {
             this.message.set(
-              `Uploaded ${track.track_type}. Original muted and old preview cleared. Click “Use for subtitles”, then Preview/Render so the player uses this audio.`
+              `Uploaded ${track.track_type}. Original muted. Use Play preview above to hear it with the video, then “Use for subtitles” and Render when ready.`
             );
           } else {
-            this.message.set('Audio track updated. Run Render with mix (or Preview render in Clips Studio) to hear it.');
+            this.message.set(
+              'Audio track updated. Use Play preview above to hear the mix; Render with mix bakes ducking/loudnorm.'
+            );
           }
         },
         error: (err) => this.error.set(err?.error?.detail || 'Upload failed'),
@@ -440,6 +697,58 @@ export class AudioStudioComponent implements OnInit, OnDestroy, AfterViewChecked
           }
         },
       });
+  }
+
+  private ensureVideoInClipWindow(video: HTMLVideoElement, clip: Clip): void {
+    const start = Math.max(0, Number(clip.start_seconds || 0));
+    const end = Math.max(start + 0.1, Number(clip.end_seconds || start + (clip.duration_seconds || 1)));
+    if (video.currentTime < start || video.currentTime >= end) {
+      video.currentTime = start;
+      this.previewPosition.set(0);
+    }
+  }
+
+  private async playAudios(): Promise<void> {
+    const tasks: Promise<void>[] = [];
+    this.previewAudios?.forEach((ref) => {
+      const audio = ref.nativeElement;
+      if (audio.muted) return;
+      tasks.push(audio.play().then(() => undefined).catch(() => undefined));
+    });
+    await Promise.all(tasks);
+  }
+
+  private pauseAudios(): void {
+    this.previewAudios?.forEach((ref) => {
+      const audio = ref.nativeElement;
+      if (!audio.paused) audio.pause();
+    });
+  }
+
+  private pausePreviewMedia(): void {
+    const video = this.previewVideo?.nativeElement;
+    if (video && !video.paused) video.pause();
+    this.pauseAudios();
+    this.previewPlaying.set(false);
+  }
+
+  private applyTrackVolumes(): void {
+    const byId = new Map((this.state()?.tracks || []).map((track) => [track.id, track]));
+    this.previewAudios?.forEach((ref) => {
+      const audio = ref.nativeElement;
+      const track = byId.get(audio.getAttribute('data-track-id') || '');
+      if (!track) return;
+      audio.volume = Math.max(0, Math.min(1, Number(track.volume || 0)));
+      audio.muted = Boolean(track.muted) || audio.volume <= 0.001;
+    });
+    const video = this.previewVideo?.nativeElement;
+    if (video) {
+      video.muted = this.videoMuted();
+      if (!video.muted) {
+        const original = this.state()?.tracks.find((track) => track.track_type === 'original');
+        video.volume = Math.max(0, Math.min(1, Number(original?.volume ?? 1)));
+      }
+    }
   }
 
   private paintWaveforms(): void {

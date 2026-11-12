@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.database.models import AudioTrack, Clip, ProcessingJob
+from app.media.http_media import file_response_for_media
 from app.orchestrator.job_manager import job_manager
 from app.schemas.audio import (
     ApplyAudioPresetRequest,
@@ -132,6 +135,27 @@ async def create_track(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _track_out(track)
+
+
+@router.get("/audio-tracks/{track_id}/media")
+def stream_audio_track(track_id: str, db: Session = Depends(get_db)) -> FileResponse:
+    """Stream an uploaded audio track for live Audio Studio A/V preview."""
+    track = db.get(AudioTrack, track_id)
+    if not track:
+        raise HTTPException(status_code=404, detail="Audio track not found")
+    if not track.source_path:
+        raise HTTPException(
+            status_code=404,
+            detail="Track has no standalone audio file (original audio comes from the video)",
+        )
+    path = Path(track.source_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found on disk")
+    download_name = None
+    meta = track.metadata_json or {}
+    if isinstance(meta, dict) and meta.get("original_filename"):
+        download_name = str(meta["original_filename"])
+    return file_response_for_media(path, download_name=download_name)
 
 
 @router.patch("/audio-tracks/{track_id}", response_model=AudioTrackOut)
