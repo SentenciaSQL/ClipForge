@@ -189,6 +189,7 @@ def create_track(
             audio_cfg["generation_audio_mode"] = "voiceover"
         clip.audio_config = audio_cfg
 
+    invalidate_clip_renders(db, clip)
     db.commit()
     db.refresh(track)
     return track
@@ -198,11 +199,14 @@ def update_track(db: Session, track_id: str, payload: AudioTrackUpdate) -> Audio
     track = db.get(AudioTrack, track_id)
     if not track:
         raise ValueError("Track not found")
+    clip = db.get(Clip, track.clip_id)
     data = payload.model_dump(exclude_unset=True)
     if track.track_type != "music":
         data.pop("ducking_enabled", None)
     for key, value in data.items():
         setattr(track, key, value)
+    if clip:
+        invalidate_clip_renders(db, clip)
     db.commit()
     db.refresh(track)
     return track
@@ -214,8 +218,11 @@ def delete_track(db: Session, track_id: str) -> None:
         raise ValueError("Track not found")
     if track.track_type == "original":
         raise ValueError("Cannot delete the original track; mute it instead")
+    clip = db.get(Clip, track.clip_id)
     source = Path(track.source_path) if track.source_path else None
     db.delete(track)
+    if clip:
+        invalidate_clip_renders(db, clip)
     db.commit()
     if source and source.exists():
         try:
@@ -281,10 +288,18 @@ def tracks_to_configs(tracks: list[AudioTrack]) -> list[AudioTrackConfig]:
     return configs
 
 
+def invalidate_clip_renders(db: Session, clip: Clip) -> None:
+    """Clear stale preview/export paths so the UI does not play pre-mix audio."""
+    clip.preview_path = None
+    clip.output_path = None
+    if clip.status in {"rendered", "exported", "previewed"}:
+        clip.status = "candidate"
+    db.add(clip)
+
+
 def build_mix_plan_for_clip(db: Session, clip: Clip) -> MixPlan:
     tracks = list_tracks(db, clip.id)
     configs = tracks_to_configs(tracks)
-    # Skip muted-only original still participates with volume 0 so graph stays valid.
     mix = get_mix_settings(clip)
     duck = {
         "threshold": mix.ducking_threshold,
@@ -301,4 +316,5 @@ def build_mix_plan_for_clip(db: Session, clip: Clip) -> MixPlan:
         enable_loudnorm=mix.enable_loudnorm,
         enable_limiter=mix.enable_limiter,
         ducking=duck,
+        clip_duration=float(clip.duration_seconds or 0) or None,
     )

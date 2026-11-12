@@ -27,17 +27,39 @@ def _process_track(
     track: AudioTrackConfig,
     source: str,
     label: str,
+    *,
+    clip_duration: float | None,
 ) -> str:
-    chain = [f"{source}volume={_volume_expr(track)}"]
+    """
+    Build a per-track audio filter ending in [label].
+
+    Always atrim to the clip window so a long replacement file cannot stretch
+    the export past clip.duration_seconds.
+    """
+    start = max(0.0, float(track.start_seconds or 0.0))
+    end = track.end_seconds
+    if end is None and clip_duration is not None:
+        end = float(clip_duration)
+    if end is not None:
+        end = max(start + 0.05, float(end))
+
+    if end is not None:
+        chain = (
+            f"{source}atrim=start={start:.3f}:end={end:.3f},"
+            f"asetpts=PTS-STARTPTS,volume={_volume_expr(track)}"
+        )
+    else:
+        chain = f"{source}volume={_volume_expr(track)}"
+
     if track.fade_in_seconds > 0:
-        chain.append(f"afade=t=in:st=0:d={track.fade_in_seconds}")
-    if track.fade_out_seconds > 0 and track.end_seconds is not None:
-        start = max(track.end_seconds - track.fade_out_seconds, 0)
-        chain.append(f"afade=t=out:st={start}:d={track.fade_out_seconds}")
+        chain += f",afade=t=in:st=0:d={track.fade_in_seconds}"
+    if track.fade_out_seconds > 0 and end is not None:
+        fade_start = max(float(end) - float(track.fade_out_seconds) - start, 0.0)
+        chain += f",afade=t=out:st={fade_start:.3f}:d={track.fade_out_seconds}"
     if track.offset_seconds:
         delay_ms = int(track.offset_seconds * 1000)
-        chain.append(f"adelay={delay_ms}|{delay_ms}")
-    return ",".join(chain) + f"[{label}]"
+        chain += f",adelay={delay_ms}|{delay_ms}"
+    return chain + f"[{label}]"
 
 
 def build_mix_plan(
@@ -47,6 +69,7 @@ def build_mix_plan(
     enable_loudnorm: bool = True,
     enable_limiter: bool = True,
     ducking: dict[str, Any] | None = None,
+    clip_duration: float | None = None,
 ) -> MixPlan:
     """
     Construct an FFmpeg filter_complex for mixing original/music/voice tracks.
@@ -63,8 +86,17 @@ def build_mix_plan(
     other_labels: list[str] = []
     duck_music = False
 
+    has_replacement_speech = any(
+        t.track_type in {"replacement", "voiceover"} and t.source_path and not t.muted for t in tracks
+    )
+
     duck = ducking or {}
     for index, track in enumerate(tracks):
+        # Muted original still had full remaining source length and stretched amix.
+        # When a replacement/VO is present, drop the original pad entirely.
+        if track.track_type == "original" and track.muted and has_replacement_speech:
+            continue
+
         label = f"a{index}"
         if track.track_type == "original":
             source = f"[{video_input_index}:a]"
@@ -75,7 +107,9 @@ def build_mix_plan(
             source = f"[{next_input}:a]"
             next_input += 1
 
-        filters.append(_process_track(track, source, label))
+        filters.append(
+            _process_track(track, source, label, clip_duration=clip_duration)
+        )
         pad = f"[{label}]"
         if track.track_type in {"original", "voiceover", "replacement"}:
             speech_labels.append(pad)
@@ -93,7 +127,12 @@ def build_mix_plan(
     def _amix(labels: list[str], out: str) -> str:
         if len(labels) == 1:
             return f"{labels[0]}anull{out}"
-        return "".join(labels) + f"amix=inputs={len(labels)}:normalize=0{out}"
+        # duration=first keeps the mix tied to the first (clip-trimmed) pad,
+        # not the longest uploaded file.
+        return (
+            "".join(labels)
+            + f"amix=inputs={len(labels)}:duration=first:dropout_transition=0:normalize=0{out}"
+        )
 
     final_inputs: list[str] = []
 
