@@ -121,8 +121,12 @@
           <button class="avc-btn-ghost" type="button" (click)="saveConfig()" [disabled]="busy() || !config()">Save config</button>
           <button class="avc-btn-ghost" type="button" (click)="runPreview()" [disabled]="busy()">Preview render</button>
           <button class="avc-btn-primary" type="button" (click)="runRender()" [disabled]="busy()">Export MP4</button>
+          <a class="avc-btn-ghost" routerLink="/audio">Replace audio / subtitles</a>
         </div>
         <p class="text-xs text-accent mt-2">{{ playerLabel(clip) }}</p>
+        <p class="text-xs text-muted mt-1">
+          To swap the soundtrack: mute/upload in Audio Studio, then Use for subtitles so captions follow the new audio.
+        </p>
         <p class="text-xs text-muted mt-2" *ngIf="clip.preview_path">Preview: {{ clip.preview_path }}</p>
         <p class="text-xs text-muted mt-1" *ngIf="clip.output_path">Output: {{ clip.output_path }}</p>
         <p class="text-xs text-accent mt-2" *ngIf="configOut()?.estimated_file_size_bytes as size">

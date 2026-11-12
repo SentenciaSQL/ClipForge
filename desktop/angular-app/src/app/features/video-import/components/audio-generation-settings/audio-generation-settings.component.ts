@@ -29,7 +29,7 @@ export class AudioGenerationSettingsComponent {
     {
       key: 'replace',
       label: 'Replace original audio',
-      help: 'Mute original so you can replace it in Audio Studio.',
+      help: 'Mute original. In Audio Studio upload your audio, then “Use for subtitles” so captions match.',
     },
     {
       key: 'music',
@@ -39,7 +39,7 @@ export class AudioGenerationSettingsComponent {
     {
       key: 'voiceover',
       label: 'Add voice-over',
-      help: 'Prepare for a voice-over track in Audio Studio after clips are created.',
+      help: 'Prepare for VO in Audio Studio. Upload VO and use “Use for subtitles” to realign captions.',
     },
   ];
 
