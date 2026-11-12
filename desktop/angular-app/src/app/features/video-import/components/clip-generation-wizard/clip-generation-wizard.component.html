@@ -57,68 +57,103 @@
       </div>
     </div>
 
-    <details class="section" [open]="isOpen('duration')" (toggle)="openSection = 'duration'">
-      <summary>A. Clip duration</summary>
-      <app-clip-duration-settings
-        [config]="config().duration"
-        [videoDuration]="video.duration_seconds"
-        (configChange)="patchConfig({ duration: $event })"
-      />
-    </details>
+    <div class="section" [class.section--open]="isOpen('duration')">
+      <button type="button" class="section__header" (click)="toggle('duration', $event)">
+        <span>A. Clip duration</span>
+        <span class="section__chevron" aria-hidden="true">{{ isOpen('duration') ? '▾' : '▸' }}</span>
+      </button>
+      <div class="section__body" *ngIf="isOpen('duration')">
+        <app-clip-duration-settings
+          [config]="config().duration"
+          [videoDuration]="video.duration_seconds"
+          (configChange)="patchConfig({ duration: $event })"
+        />
+      </div>
+    </div>
 
-    <details class="section" [open]="isOpen('subtitles')" (toggle)="openSection = 'subtitles'">
-      <summary>B. Subtitle configuration</summary>
-      <app-subtitle-settings
-        [config]="config().subtitles"
-        [presets]="subtitlePresets()"
-        (configChange)="patchConfig({ subtitles: $event })"
-      />
-    </details>
+    <div class="section" [class.section--open]="isOpen('subtitles')">
+      <button type="button" class="section__header" (click)="toggle('subtitles', $event)">
+        <span>B. Subtitle configuration</span>
+        <span class="section__chevron" aria-hidden="true">{{ isOpen('subtitles') ? '▾' : '▸' }}</span>
+      </button>
+      <div class="section__body" *ngIf="isOpen('subtitles')">
+        <app-subtitle-settings
+          [config]="config().subtitles"
+          [presets]="subtitlePresets()"
+          (configChange)="patchConfig({ subtitles: $event })"
+        />
+      </div>
+    </div>
 
-    <details class="section" [open]="isOpen('quality')" (toggle)="openSection = 'quality'">
-      <summary>Quality &amp; adaptive rendering</summary>
-      <app-quality-settings
-        [config]="config().video"
-        [sourceQuality]="sourceQuality()"
-        [warnings]="warnings()"
-        (configChange)="patchConfig({ video: $event }); refreshSourceQuality()"
-        (applyAdaptive)="applyAdaptiveRecommendation()"
-      />
-    </details>
+    <div class="section" [class.section--open]="isOpen('quality')">
+      <button type="button" class="section__header" (click)="toggle('quality', $event)">
+        <span>Quality &amp; adaptive rendering</span>
+        <span class="section__chevron" aria-hidden="true">{{ isOpen('quality') ? '▾' : '▸' }}</span>
+      </button>
+      <div class="section__body" *ngIf="isOpen('quality')">
+        <app-quality-settings
+          [config]="config().video"
+          [sourceQuality]="sourceQuality()"
+          [warnings]="warnings()"
+          (configChange)="patchConfig({ video: $event }); refreshSourceQuality()"
+          (applyAdaptive)="applyAdaptiveRecommendation()"
+        />
+      </div>
+    </div>
 
-    <details class="section" [open]="isOpen('format')" (toggle)="openSection = 'format'">
-      <summary>C–D. Video frame, resolution &amp; FPS</summary>
-      <app-video-format-settings
-        [config]="config().video"
-        [sourceWidth]="video.width"
-        [sourceHeight]="video.height"
-        (configChange)="patchConfig({ video: $event }); refreshSourceQuality()"
-      />
-    </details>
+    <div class="section" [class.section--open]="isOpen('format')">
+      <button type="button" class="section__header" (click)="toggle('format', $event)">
+        <span>C–D. Video frame, resolution &amp; FPS</span>
+        <span class="section__chevron" aria-hidden="true">{{ isOpen('format') ? '▾' : '▸' }}</span>
+      </button>
+      <div class="section__body" *ngIf="isOpen('format')">
+        <app-video-format-settings
+          [config]="config().video"
+          [sourceWidth]="video.width"
+          [sourceHeight]="video.height"
+          (configChange)="patchConfig({ video: $event }); refreshSourceQuality()"
+        />
+      </div>
+    </div>
 
-    <details class="section" [open]="isOpen('reframe')" (toggle)="openSection = 'reframe'">
-      <summary>E. Reframing mode</summary>
-      <app-reframing-settings
-        [config]="config().reframe"
-        (configChange)="patchConfig({ reframe: $event })"
-      />
-    </details>
+    <div class="section" [class.section--open]="isOpen('reframe')">
+      <button type="button" class="section__header" (click)="toggle('reframe', $event)">
+        <span>E. Reframing mode</span>
+        <span class="section__chevron" aria-hidden="true">{{ isOpen('reframe') ? '▾' : '▸' }}</span>
+      </button>
+      <div class="section__body" *ngIf="isOpen('reframe')">
+        <app-reframing-settings
+          [config]="config().reframe"
+          (configChange)="patchConfig({ reframe: $event })"
+        />
+      </div>
+    </div>
 
-    <details class="section" [open]="isOpen('ai')" (toggle)="openSection = 'ai'">
-      <summary>F. AI analysis</summary>
-      <app-ai-analysis-settings
-        [config]="config().analysis"
-        (configChange)="patchConfig({ analysis: $event })"
-      />
-    </details>
+    <div class="section" [class.section--open]="isOpen('ai')">
+      <button type="button" class="section__header" (click)="toggle('ai', $event)">
+        <span>F. AI analysis</span>
+        <span class="section__chevron" aria-hidden="true">{{ isOpen('ai') ? '▾' : '▸' }}</span>
+      </button>
+      <div class="section__body" *ngIf="isOpen('ai')">
+        <app-ai-analysis-settings
+          [config]="config().analysis"
+          (configChange)="patchConfig({ analysis: $event })"
+        />
+      </div>
+    </div>
 
-    <details class="section" [open]="isOpen('audio')" (toggle)="openSection = 'audio'">
-      <summary>G. Audio configuration</summary>
-      <app-audio-generation-settings
-        [config]="config().audio"
-        (configChange)="patchConfig({ audio: $event })"
-      />
-    </details>
+    <div class="section" [class.section--open]="isOpen('audio')">
+      <button type="button" class="section__header" (click)="toggle('audio', $event)">
+        <span>G. Audio configuration</span>
+        <span class="section__chevron" aria-hidden="true">{{ isOpen('audio') ? '▾' : '▸' }}</span>
+      </button>
+      <div class="section__body" *ngIf="isOpen('audio')">
+        <app-audio-generation-settings
+          [config]="config().audio"
+          (configChange)="patchConfig({ audio: $event })"
+        />
+      </div>
+    </div>
 
     <div class="wizard__footer">
       <button type="button" class="avc-btn-ghost" (click)="saveConfiguration()" [disabled]="busy">

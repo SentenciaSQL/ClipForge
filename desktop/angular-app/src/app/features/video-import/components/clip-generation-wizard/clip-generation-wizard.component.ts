@@ -69,7 +69,8 @@ export class ClipGenerationWizardComponent implements OnChanges {
   readonly error = signal<string | null>(null);
 
   step: WizardStep = 'configure';
-  openSection: SectionKey = 'quality';
+  /** Multiple sections can stay open; avoids flaky native <details> + [open] binding. */
+  openSections = new Set<SectionKey>(['quality', 'duration']);
   selectedProfileId = '';
   newProfileName = '';
   dirty = false;
@@ -142,12 +143,20 @@ export class ClipGenerationWizardComponent implements OnChanges {
     });
   }
 
-  toggle(section: SectionKey): void {
-    this.openSection = this.openSection === section ? section : section;
+  toggle(section: SectionKey, event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (this.openSections.has(section)) {
+      this.openSections.delete(section);
+    } else {
+      this.openSections.add(section);
+    }
+    // New Set reference so Angular re-checks isOpen() after the click.
+    this.openSections = new Set(this.openSections);
   }
 
   isOpen(section: SectionKey): boolean {
-    return this.openSection === section;
+    return this.openSections.has(section);
   }
 
   patchConfig(partial: Partial<GenerationConfiguration>): void {
