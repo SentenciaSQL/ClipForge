@@ -72,23 +72,100 @@ def _margin_v(preset: dict[str, Any], play_res_y: int) -> int:
     return base
 
 
+def _effective_max_chars(
+    preset: dict[str, Any],
+    *,
+    play_res_x: int,
+    margin_h: int,
+    font_size: int,
+) -> int:
+    """
+    Cap characters per line so bold/large captions fit a vertical canvas.
+
+    Prefer the configured max_chars_per_line, but never exceed a width estimate
+    from PlayResX / font size (uppercase Hormozi-style fonts are wide).
+    """
+    configured = int(preset.get("max_chars_per_line") or 28)
+    configured = max(8, min(80, configured))
+    usable = max(120, int(play_res_x) - 2 * max(int(margin_h), 0))
+    # Bold caps are wide (≈0.7× font size); keep slack for outlines/shadows.
+    approx_char_w = max(10.0, float(font_size) * (0.70 if preset.get("uppercase") else 0.58))
+    fitted = max(8, int(usable / approx_char_w))
+    return min(configured, fitted)
+
+
 def _group_words(
     words: list[dict[str, Any]],
     *,
-    max_words: int = 4,
+    max_chars_per_line: int = 22,
+    max_lines: int = 2,
 ) -> list[list[dict[str, Any]]]:
+    """
+    Chunk words into on-screen captions that fit max_lines × max_chars_per_line.
+
+    Also breaks early on sentence punctuation so captions stay readable.
+    """
+    max_chars_per_line = max(8, int(max_chars_per_line))
+    max_lines = max(1, min(4, int(max_lines)))
+    budget = max_chars_per_line * max_lines
+
     groups: list[list[dict[str, Any]]] = []
     current: list[dict[str, Any]] = []
+    current_len = 0
+
     for word in words:
-        current.append(word)
-        token = str(word.get("word") or "")
-        end_sentence = token.rstrip().endswith((".", "!", "?", ",", ";"))
-        if len(current) >= max_words or end_sentence:
+        token = str(word.get("word") or "").strip()
+        if not token:
+            continue
+        add = len(token) + (1 if current else 0)
+        # Soft cap: start a new caption when the character budget is exceeded
+        # (always keep at least one word in the current group).
+        if current and current_len + add > budget:
+            groups.append(current)
+            current = [word]
+            current_len = len(token)
+        else:
+            current.append(word)
+            current_len += add
+
+        end_sentence = token.rstrip().endswith((".", "!", "?"))
+        # Hard break on sentence end once we have a bit of content.
+        if end_sentence and current_len >= max(8, max_chars_per_line // 2):
             groups.append(current)
             current = []
+            current_len = 0
+
     if current:
         groups.append(current)
     return groups
+
+
+def _wrap_formatted_words(
+    formatted: list[tuple[str, int]],
+    *,
+    max_chars_per_line: int,
+) -> str:
+    """
+    Join pre-formatted ASS word tokens with spaces / \\N line breaks.
+
+    `formatted` is a list of (ass_fragment, visible_char_len).
+    """
+    max_chars_per_line = max(8, int(max_chars_per_line))
+    lines: list[list[str]] = []
+    current: list[str] = []
+    current_len = 0
+    for fragment, visible_len in formatted:
+        add = visible_len + (1 if current else 0)
+        if current and current_len + add > max_chars_per_line:
+            lines.append(current)
+            current = [fragment]
+            current_len = visible_len
+        else:
+            current.append(fragment)
+            current_len += add
+    if current:
+        lines.append(current)
+    return r"\N".join(" ".join(parts) for parts in lines)
 
 
 def _event_prefix(animation: str) -> str:
@@ -153,12 +230,20 @@ def build_ass_for_clip(
     border_style = 3 if box_enabled else 1
     box_alpha = _opacity_to_ass_alpha(float(preset.get("box_opacity") if preset.get("box_opacity") is not None else 0.55))
     back = _ass_color(str(preset.get("box_color") or "#000000"), alpha=box_alpha)
+    max_lines = max(1, min(4, int(preset.get("max_lines") or 2)))
+    max_chars = _effective_max_chars(
+        preset,
+        play_res_x=play_res_x,
+        margin_h=margin_h,
+        font_size=font_size,
+    )
 
+    # WrapStyle 0 = smart word wrap (fallback); we still insert explicit \\N breaks.
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {play_res_x}
 PlayResY: {play_res_y}
-WrapStyle: 2
+WrapStyle: 0
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
@@ -171,7 +256,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     events: list[str] = []
     prefix = _event_prefix(animation)
-    groups = _group_words(relative_words, max_words=int(preset.get("max_lines", 2)) * 3 or 4)
+    groups = _group_words(
+        relative_words,
+        max_chars_per_line=max_chars,
+        max_lines=max_lines,
+    )
     for group in groups:
         if not group:
             continue
@@ -182,19 +271,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 # Show the phrase while the active word is spoken.
                 start = active["start"]
                 end = group[index + 1]["start"] if index + 1 < len(group) else group_end
-                parts: list[str] = []
+                formatted: list[tuple[str, int]] = []
                 for word in group:
-                    text = _escape_ass_text(str(word["word"]))
+                    token = str(word["word"])
+                    text = _escape_ass_text(token)
                     if word is active:
-                        parts.append(f"{{\\c{highlight}\\b1}}{text}{{\\c{primary}\\b0}}")
+                        fragment = f"{{\\c{highlight}\\b1}}{text}{{\\c{primary}\\b0}}"
                     else:
-                        parts.append(text)
-                line = prefix + " ".join(parts)
+                        fragment = text
+                    formatted.append((fragment, len(token)))
+                line = prefix + _wrap_formatted_words(formatted, max_chars_per_line=max_chars)
                 events.append(
                     f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},Default,,0,0,0,,{line}"
                 )
         else:
-            line = prefix + " ".join(_escape_ass_text(str(w["word"])) for w in group)
+            formatted = [
+                (_escape_ass_text(str(w["word"])), len(str(w["word"]))) for w in group
+            ]
+            line = prefix + _wrap_formatted_words(formatted, max_chars_per_line=max_chars)
             events.append(
                 f"Dialogue: 0,{_ass_time(group_start)},{_ass_time(group_end)},Default,,0,0,0,,{line}"
             )
