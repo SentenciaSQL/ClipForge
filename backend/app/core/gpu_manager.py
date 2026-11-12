@@ -95,7 +95,15 @@ class GpuManager:
 
     def prepare_for_llm(self) -> dict[str, Any]:
         """Free Whisper VRAM before Ollama inference."""
-        return self.unload_whisper(reason="before_ollama")
+        import time
+
+        result = self.unload_whisper(reason="before_ollama")
+        # Give the driver a beat to reclaim pages before Ollama loads weights.
+        # Without this, Windows often hits "CUDA illegal memory access" in Ollama.
+        time.sleep(1.0)
+        result.update(self._collect_memory())
+        result["settled"] = True
+        return result
 
     def prepare_for_render(self) -> dict[str, Any]:
         """Free Whisper weights before encode (NVENC + host RAM pressure)."""

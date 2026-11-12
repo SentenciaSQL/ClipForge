@@ -133,14 +133,24 @@ class HighlightAnalyzer:
                 effective_min = max(1, int(video_duration))
 
         raw_candidates: list[RankedCandidate] = []
+        chunk_failures = 0
         for chunk in chunks:
-            proposals = self._analyze_chunk(
-                chunk,
-                model=model_name,
-                min_seconds=effective_min,
-                max_seconds=effective_max,
-                content_category=category,
-            )
+            try:
+                proposals = self._analyze_chunk(
+                    chunk,
+                    model=model_name,
+                    min_seconds=effective_min,
+                    max_seconds=effective_max,
+                    content_category=category,
+                )
+            except OllamaError as exc:
+                chunk_failures += 1
+                logger.warning(
+                    "Ollama failed on highlight chunk %s (%s); continuing with remaining chunks",
+                    chunk.index,
+                    exc,
+                )
+                continue
             for proposal in proposals:
                 snapped = snap_window(
                     segments,
@@ -191,8 +201,10 @@ class HighlightAnalyzer:
         selected = select_distinct_candidates(raw_candidates, max_count=max(1, clip_count))
         if not selected:
             logger.warning(
-                "Ollama produced 0 usable clips (raw=%s); running speech-optional heuristic fallback",
+                "Ollama produced 0 usable clips (raw=%s, chunk_failures=%s); "
+                "running speech-optional heuristic fallback",
                 len(raw_candidates),
+                chunk_failures,
             )
             selected = build_heuristic_candidates(
                 segments,
@@ -201,6 +213,11 @@ class HighlightAnalyzer:
                 max_seconds=float(effective_max),
                 video_duration=video_duration,
             )
+            if not selected and chunk_failures and chunk_failures >= max(1, len(chunks)):
+                raise OllamaError(
+                    "Ollama CUDA/GPU failed on every highlight chunk and heuristic fallback "
+                    "also found no clips. Restart Ollama (or set a smaller model) and retry."
+                )
         logger.info(
             "Highlight analysis produced %s raw / %s selected candidates using %s",
             len(raw_candidates),

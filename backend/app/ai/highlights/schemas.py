@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 HighlightCategory = Literal[
     "hook",
@@ -112,6 +112,39 @@ class HighlightProposal(BaseModel):
     @classmethod
     def _coerce_category(cls, value: Any) -> HighlightCategory:
         return normalize_highlight_category(value)
+
+    @field_validator("hook", mode="before")
+    @classmethod
+    def _coerce_hook(cls, value: Any) -> str:
+        text = str(value or "").strip()
+        return text or "Highlight moment"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_timestamps(cls, value: Any) -> Any:
+        """Normalize common LLM shape quirks (duration instead of end, aliases)."""
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        if "start_seconds" not in data:
+            for key in ("start", "begin", "begin_seconds", "from"):
+                if key in data:
+                    data["start_seconds"] = data[key]
+                    break
+        if "end_seconds" not in data:
+            for key in ("end", "finish", "to", "stop_seconds"):
+                if key in data:
+                    data["end_seconds"] = data[key]
+                    break
+        if "end_seconds" not in data:
+            start = data.get("start_seconds")
+            duration = data.get("duration_seconds", data.get("duration", data.get("length")))
+            try:
+                if start is not None and duration is not None:
+                    data["end_seconds"] = float(start) + float(duration)
+            except (TypeError, ValueError):
+                pass
+        return data
 
     @field_validator("end_seconds")
     @classmethod

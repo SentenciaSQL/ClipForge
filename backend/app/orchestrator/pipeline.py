@@ -307,9 +307,23 @@ def run_analyze_job(job_id: str) -> None:
             # analyzer already returns selected/distinct; keep a scored pool = selected for persistence rank.
             raw_pool = list(selected)
         except OllamaError as exc:
-            logger.exception("Semantic analysis failed for job %s", job_id)
-            _fail_job(db, job, stages, "semantic_analysis", str(exc), started)
-            return
+            # Last-resort: keep the job alive with heuristic clips when Ollama CUDA dies.
+            logger.exception("Semantic analysis Ollama error for job %s; trying heuristic fallback", job_id)
+            from app.ai.highlights.heuristic import build_heuristic_candidates
+
+            selected = build_heuristic_candidates(
+                segments,
+                clip_count=clip_count,
+                min_seconds=float(min_duration),
+                max_seconds=float(max_duration),
+                video_duration=video.duration_seconds,
+            )
+            if not selected:
+                _fail_job(db, job, stages, "semantic_analysis", str(exc), started)
+                return
+            raw_pool = list(selected)
+            job.message = f"Ollama unavailable ({exc}); continued with heuristic clips"
+            db.commit()
         except Exception as exc:  # noqa: BLE001
             logger.exception("Semantic analysis failed for job %s", job_id)
             _fail_job(db, job, stages, "semantic_analysis", f"Semantic analysis failed: {exc}", started)
