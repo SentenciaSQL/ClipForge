@@ -128,6 +128,10 @@ export class ApiService {
     return `${this.baseUrl}/clips/${clipId}/media?kind=${kind}`;
   }
 
+  audioTrackMediaUrl(trackId: string): string {
+    return `${this.baseUrl}/audio-tracks/${trackId}/media`;
+  }
+
   listGenerationProfiles(): Observable<GenerationProfile[]> {
     return this.http.get<GenerationProfile[]>(`${this.baseUrl}/generation-profiles`);
   }
