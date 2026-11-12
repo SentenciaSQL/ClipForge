@@ -1,5 +1,13 @@
 import { DecimalPipe, NgFor, NgIf } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription, switchMap, timer } from 'rxjs';
@@ -15,6 +23,19 @@ import {
   SubtitlePreset,
 } from '../../core/models';
 import { ApiService } from '../../core/services/api.service';
+import {
+  SubtitleCue,
+  clipDurationSeconds,
+  cueAtTime,
+  cuesFromPlainText,
+  cuesFromTranscriptionSegments,
+  mergeCues,
+  normalizeCue,
+  nudgeAllCues,
+  nudgeCue,
+  sortCues,
+  splitCueAt,
+} from './subtitle-cues.util';
 
 @Component({
   selector: 'app-clips-studio',
@@ -29,6 +50,8 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
   private pollSub: Subscription | null = null;
   private pendingClipId: string | null = null;
 
+  @ViewChild('previewPlayer') private previewPlayer?: ElementRef<HTMLVideoElement>;
+
   readonly Math = Math;
   readonly videos = signal<SourceVideo[]>([]);
   readonly clips = signal<Clip[]>([]);
@@ -42,6 +65,8 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
+  readonly playheadSeconds = signal(0);
+  readonly activeCueIndex = signal(-1);
   readonly fontChoices = [
     'Montserrat',
     'Inter',
@@ -63,7 +88,6 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
   editStart = 0;
   editEnd = 0;
   dirty = false;
-  subtitleOverrideText = '';
   selectedProfileId = '';
   newProfileName = '';
   readonly manualCropKeys = ['x', 'y', 'width', 'height'] as const;
@@ -122,8 +146,9 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
     this.activeClip.set(clip);
     this.editStart = clip.start_seconds;
     this.editEnd = clip.end_seconds;
-    this.subtitleOverrideText = clip.transcript || '';
     this.dirty = false;
+    this.playheadSeconds.set(0);
+    this.activeCueIndex.set(-1);
     this.api.getClipConfiguration(clip.id).subscribe({
       next: (out) => {
         this.configOut.set(out);
@@ -131,9 +156,20 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
         if (cfg.video.opacity == null || Number.isNaN(Number(cfg.video.opacity))) {
           cfg.video.opacity = 1;
         }
-        this.config.set(cfg);
-        if (!this.subtitleOverrideText && out.configuration.subtitles.segments?.length) {
-          this.subtitleOverrideText = out.configuration.subtitles.segments.map((s) => s.text).join(' ');
+        if (cfg.subtitles.timing_offset_seconds == null) {
+          cfg.subtitles.timing_offset_seconds = 0;
+        }
+        // Keep multi-cue timing from Audio Studio / prior edits — never collapse on load.
+        if (cfg.subtitles.segments?.length) {
+          cfg.subtitles.segments = sortCues(
+            cfg.subtitles.segments.map((seg) =>
+              normalizeCue(seg, { duration: this.clipDuration() })
+            )
+          );
+          this.config.set(cfg);
+        } else {
+          this.config.set(cfg);
+          this.seedCuesFromTranscription(clip, cfg);
         }
       },
       error: (err) => this.error.set(err?.error?.detail || 'Failed to load clip configuration'),
@@ -150,9 +186,261 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
     return `${cfg.video.width} / ${cfg.video.height}`;
   }
 
+  clipDuration(): number {
+    const clip = this.activeClip();
+    return clipDurationSeconds(this.editStart, this.editEnd, Number(clip?.duration_seconds) || 1);
+  }
+
+  cues(): SubtitleCue[] {
+    return this.config()?.subtitles?.segments || [];
+  }
+
   subtitlePreviewText(): string {
-    const text = this.subtitleOverrideText.trim() || this.activeClip()?.hook || 'Subtitle preview';
-    return text.slice(0, 80);
+    const cfg = this.config();
+    const offset = Number(cfg?.subtitles?.timing_offset_seconds || 0);
+    const live = cueAtTime(this.cues(), this.playheadSeconds(), offset);
+    if (live?.text) return live.text.slice(0, 120);
+    const selected = this.cues()[this.activeCueIndex()];
+    if (selected?.text) return selected.text.slice(0, 120);
+    return this.activeClip()?.hook || 'Subtitle preview';
+  }
+
+  onPreviewTimeUpdate(): void {
+    const video = this.previewPlayer?.nativeElement;
+    const clip = this.activeClip();
+    if (!video || !clip) return;
+    const relative = this.hasRenderedMedia(clip)
+      ? video.currentTime
+      : Math.max(0, video.currentTime - Number(clip.start_seconds || 0));
+    this.playheadSeconds.set(relative);
+  }
+
+  seekToCue(index: number): void {
+    const cue = this.cues()[index];
+    const video = this.previewPlayer?.nativeElement;
+    const clip = this.activeClip();
+    if (!cue || !video || !clip) return;
+    this.activeCueIndex.set(index);
+    const offset = Number(this.config()?.subtitles?.timing_offset_seconds || 0);
+    const target = Math.max(0, cue.start + offset);
+    if (this.hasRenderedMedia(clip)) {
+      video.currentTime = target;
+    } else {
+      video.currentTime = Number(clip.start_seconds || 0) + target;
+    }
+    this.playheadSeconds.set(target);
+  }
+
+  updateCue(index: number, patch: Partial<SubtitleCue>): void {
+    const cfg = this.config();
+    if (!cfg?.subtitles.segments) return;
+    const duration = this.clipDuration();
+    const next = [...cfg.subtitles.segments];
+    next[index] = normalizeCue({ ...next[index], ...patch }, { duration });
+    cfg.subtitles.segments = sortCues(next);
+    this.config.set({ ...cfg });
+    this.markDirty();
+  }
+
+  nudgeSelected(delta: number): void {
+    const index = this.activeCueIndex();
+    if (index < 0) {
+      this.nudgeAll(delta);
+      return;
+    }
+    const cfg = this.config();
+    if (!cfg?.subtitles.segments?.[index]) return;
+    const moved = nudgeCue(cfg.subtitles.segments[index], delta, { duration: this.clipDuration() });
+    const next = [...cfg.subtitles.segments];
+    next[index] = moved;
+    cfg.subtitles.segments = sortCues(next);
+    this.config.set({ ...cfg });
+    this.activeCueIndex.set(
+      cfg.subtitles.segments.findIndex((c) => c.start === moved.start && c.end === moved.end && c.text === moved.text)
+    );
+    this.markDirty();
+  }
+
+  nudgeAll(delta: number): void {
+    const cfg = this.config();
+    if (!cfg?.subtitles.segments?.length) return;
+    cfg.subtitles.segments = nudgeAllCues(cfg.subtitles.segments, delta, this.clipDuration());
+    this.config.set({ ...cfg });
+    this.markDirty();
+  }
+
+  nudgeCueRow(index: number, delta: number): void {
+    this.activeCueIndex.set(index);
+    const cfg = this.config();
+    if (!cfg?.subtitles.segments?.[index]) return;
+    const moved = nudgeCue(cfg.subtitles.segments[index], delta, { duration: this.clipDuration() });
+    const next = [...cfg.subtitles.segments];
+    next[index] = moved;
+    cfg.subtitles.segments = sortCues(next);
+    this.config.set({ ...cfg });
+    this.activeCueIndex.set(
+      cfg.subtitles.segments.findIndex((c) => c.start === moved.start && c.end === moved.end && c.text === moved.text)
+    );
+    this.markDirty();
+  }
+
+  addCue(): void {
+    const cfg = this.config();
+    if (!cfg) return;
+    const duration = this.clipDuration();
+    const last = this.cues()[this.cues().length - 1];
+    const start = last ? Math.min(duration - 0.4, last.end) : Math.max(0, this.playheadSeconds());
+    const cue = normalizeCue(
+      { text: 'New caption', start, end: Math.min(duration, start + 1.2) },
+      { duration }
+    );
+    cfg.subtitles.segments = sortCues([...(cfg.subtitles.segments || []), cue]);
+    this.config.set({ ...cfg });
+    this.activeCueIndex.set(cfg.subtitles.segments.findIndex((c) => c.start === cue.start && c.text === cue.text));
+    this.markDirty();
+  }
+
+  deleteCue(index: number): void {
+    const cfg = this.config();
+    if (!cfg?.subtitles.segments) return;
+    cfg.subtitles.segments = cfg.subtitles.segments.filter((_, i) => i !== index);
+    if (!cfg.subtitles.segments.length) cfg.subtitles.segments = null;
+    this.config.set({ ...cfg });
+    this.activeCueIndex.set(-1);
+    this.markDirty();
+  }
+
+  splitSelectedCue(): void {
+    const index = this.activeCueIndex();
+    const cfg = this.config();
+    if (index < 0 || !cfg?.subtitles.segments?.[index]) return;
+    const cue = cfg.subtitles.segments[index];
+    const offset = Number(cfg.subtitles.timing_offset_seconds || 0);
+    const playhead = this.playheadSeconds() - offset;
+    const split = splitCueAt(cue, {
+      atSeconds: playhead > cue.start && playhead < cue.end ? playhead : undefined,
+    });
+    if (!split) {
+      this.error.set('Cue is too short to split — place the playhead inside it or lengthen it.');
+      return;
+    }
+    const next = [...cfg.subtitles.segments];
+    next.splice(index, 1, ...split);
+    cfg.subtitles.segments = sortCues(next);
+    this.config.set({ ...cfg });
+    this.activeCueIndex.set(index);
+    this.markDirty();
+  }
+
+  mergeWithNext(index: number): void {
+    const cfg = this.config();
+    if (!cfg?.subtitles.segments || index < 0 || index >= cfg.subtitles.segments.length - 1) return;
+    const merged = mergeCues(cfg.subtitles.segments[index], cfg.subtitles.segments[index + 1]);
+    const next = [...cfg.subtitles.segments];
+    next.splice(index, 2, merged);
+    cfg.subtitles.segments = sortCues(next);
+    this.config.set({ ...cfg });
+    this.activeCueIndex.set(index);
+    this.markDirty();
+  }
+
+  clearCues(): void {
+    const cfg = this.config();
+    if (!cfg) return;
+    cfg.subtitles.segments = null;
+    this.config.set({ ...cfg });
+    this.activeCueIndex.set(-1);
+    this.markDirty();
+  }
+
+  reseedFromTranscript(): void {
+    const clip = this.activeClip();
+    const cfg = this.config();
+    if (!clip || !cfg) return;
+    this.seedCuesFromTranscription(clip, cfg, true);
+  }
+
+  autoSplitPlainText(): void {
+    const cfg = this.config();
+    if (!cfg) return;
+    const text =
+      this.cues()
+        .map((c) => c.text)
+        .join(' ')
+        .trim() ||
+      this.activeClip()?.transcript ||
+      '';
+    if (!text.trim()) {
+      this.error.set('No text available to split into cues');
+      return;
+    }
+    cfg.subtitles.segments = cuesFromPlainText(text, this.clipDuration());
+    this.config.set({ ...cfg });
+    this.activeCueIndex.set(0);
+    this.markDirty();
+    this.message.set(`Split into ${cfg.subtitles.segments.length} cues — nudge timing as needed.`);
+  }
+
+  cueLaneStyle(cue: SubtitleCue): Record<string, string> {
+    const duration = this.clipDuration();
+    const left = Math.max(0, (cue.start / duration) * 100);
+    const width = Math.max(1.5, ((cue.end - cue.start) / duration) * 100);
+    return {
+      left: `${left}%`,
+      width: `${width}%`,
+    };
+  }
+
+  playheadLaneStyle(): Record<string, string> {
+    const duration = this.clipDuration();
+    const left = Math.max(0, Math.min(100, (this.playheadSeconds() / duration) * 100));
+    return { left: `${left}%` };
+  }
+
+  private seedCuesFromTranscription(
+    clip: Clip,
+    cfg: ClipConfiguration,
+    force = false
+  ): void {
+    if (!force && cfg.subtitles.segments?.length) return;
+    this.api.getVideoTranscription(clip.video_id, true).subscribe({
+      next: (transcription) => {
+        const duration = this.clipDuration();
+        let cues = cuesFromTranscriptionSegments(transcription.segments || [], {
+          clipStart: Number(clip.start_seconds || 0),
+          clipEnd: Number(clip.end_seconds || clip.start_seconds + duration),
+        });
+        if (!cues.length) {
+          const text = clip.transcript || transcription.full_text || '';
+          cues = cuesFromPlainText(text, duration);
+        }
+        if (!cues.length) return;
+        const latest = this.config();
+        if (!latest) return;
+        if (!force && latest.subtitles.segments?.length) return;
+        latest.subtitles.segments = cues;
+        this.config.set({ ...latest });
+        if (force) this.markDirty();
+        this.message.set(
+          force
+            ? `Reloaded ${cues.length} cues from transcription.`
+            : `Loaded ${cues.length} editable cues — adjust timing like CapCut, then Save / Preview.`
+        );
+      },
+      error: () => {
+        if (!force) return;
+        const text = clip.transcript || '';
+        if (!text.trim()) {
+          this.error.set('No transcription available to seed cues');
+          return;
+        }
+        const latest = this.config();
+        if (!latest) return;
+        latest.subtitles.segments = cuesFromPlainText(text, this.clipDuration());
+        this.config.set({ ...latest });
+        this.markDirty();
+      },
+    });
   }
 
   hasRenderedMedia(clip: Clip): boolean {
@@ -274,15 +562,14 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
     if (cfg.subtitles.timing_offset_seconds == null || Number.isNaN(Number(cfg.subtitles.timing_offset_seconds))) {
       cfg.subtitles.timing_offset_seconds = 0;
     }
-    if (this.subtitleOverrideText.trim()) {
-      const duration = Math.max(0.5, this.editEnd - this.editStart);
-      cfg.subtitles.segments = [
-        {
-          text: this.subtitleOverrideText.trim(),
-          start: 0,
-          end: duration,
-        },
-      ];
+    // Preserve per-cue timing (CapCut-style). Never collapse to a single full-clip segment.
+    if (cfg.subtitles.segments?.length) {
+      const duration = this.clipDuration();
+      cfg.subtitles.segments = sortCues(
+        cfg.subtitles.segments.map((seg) => normalizeCue(seg, { duration }))
+      );
+    } else {
+      cfg.subtitles.segments = null;
     }
     return {
       subtitles: cfg.subtitles,
