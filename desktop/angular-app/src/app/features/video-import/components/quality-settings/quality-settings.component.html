@@ -96,11 +96,8 @@
     Apply adaptive recommendation now
   </button>
 
-  <div class="quality__warn" *ngIf="warnings.length">
-    <div *ngFor="let warn of warnings">{{ warn }}</div>
-  </div>
-  <div class="quality__warn" *ngIf="sourceQuality?.warnings?.length">
-    <div *ngFor="let warn of sourceQuality?.warnings || []">{{ warn }}</div>
+  <div class="quality__warn" *ngIf="uniqueWarnings().length">
+    <div *ngFor="let warn of uniqueWarnings()">{{ warn }}</div>
   </div>
 
   <p class="quality__hint">

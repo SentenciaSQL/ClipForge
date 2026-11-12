@@ -162,7 +162,9 @@ def configuration_out(db: Session, video: SourceVideo) -> GenerationConfiguratio
     # Fresh videos with empty config still get adaptive defaults when auto_quality is on.
     if not video.generation_config_json and config.video.auto_quality:
         config = apply_adaptive_quality(config, video=video)
-    validation = validate_generation_configuration(config, video=video)
+        save_generation_configuration(db, video, config, apply_adaptive=False)
+
+    # Probe recommendations against the *current* canvas.
     quality = assess_source_quality(
         path=video.stored_path if video.stored_path else None,
         width=video.width,
@@ -174,7 +176,40 @@ def configuration_out(db: Session, video: SourceVideo) -> GenerationConfiguratio
         aspect_key=config.video.aspect_ratio,
         allow_upscale=bool(config.video.allow_upscale),
         content_hint=config.analysis.content_category,
+        requested_width=config.video.width,
+        requested_height=config.video.height,
     )
+
+    # If auto_quality is on and the saved canvas is still too large, apply the
+    # recommendation automatically so exports match source detail.
+    rec = quality.recommendations or {}
+    rec_w = int(rec.get("width") or 0)
+    rec_h = int(rec.get("height") or 0)
+    if (
+        config.video.auto_quality
+        and not config.video.allow_upscale
+        and rec_w
+        and rec_h
+        and (config.video.width > rec_w + 2 or config.video.height > rec_h + 2)
+    ):
+        config = apply_adaptive_quality(config, video=video, force=True)
+        save_generation_configuration(db, video, config, apply_adaptive=False)
+        quality = assess_source_quality(
+            path=video.stored_path if video.stored_path else None,
+            width=video.width,
+            height=video.height,
+            fps=video.fps,
+            video_codec=video.video_codec,
+            audio_codec=video.audio_codec,
+            bitrate=video.bitrate,
+            aspect_key=config.video.aspect_ratio,
+            allow_upscale=bool(config.video.allow_upscale),
+            content_hint=config.analysis.content_category,
+            requested_width=config.video.width,
+            requested_height=config.video.height,
+        )
+
+    validation = validate_generation_configuration(config, video=video)
     # Merge quality warnings into validation warnings (do not fail the request).
     for warn in quality.warnings:
         if warn not in (validation.get("warnings") or []):

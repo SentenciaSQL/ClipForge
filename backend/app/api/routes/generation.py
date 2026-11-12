@@ -36,6 +36,8 @@ def get_source_quality(
     aspect_ratio: str = "9:16",
     allow_upscale: bool = False,
     content_hint: str | None = None,
+    requested_width: int | None = None,
+    requested_height: int | None = None,
     db: Session = Depends(get_db),
 ) -> dict:
     """Source quality assessment + adaptive render recommendations (FFprobe-based)."""
@@ -56,6 +58,8 @@ def get_source_quality(
         aspect_key=aspect_ratio,
         allow_upscale=allow_upscale,
         content_hint=content_hint,
+        requested_width=requested_width,
+        requested_height=requested_height,
     )
     payload = assessment.to_dict()
     payload["ai_upscale"] = detect_ai_upscaler().to_dict()

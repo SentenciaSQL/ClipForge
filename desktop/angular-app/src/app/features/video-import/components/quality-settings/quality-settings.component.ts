@@ -65,4 +65,9 @@ export class QualitySettingsComponent {
     const notes = this.sourceQuality?.recommendations?.['notes'];
     return Array.isArray(notes) ? (notes as string[]) : [];
   }
+
+  uniqueWarnings(): string[] {
+    const merged = [...(this.warnings || []), ...(this.sourceQuality?.warnings || [])];
+    return [...new Set(merged.map((item) => String(item || '').trim()).filter(Boolean))];
+  }
 }

@@ -160,12 +160,20 @@ export class ApiService {
 
   getSourceQuality(
     videoId: string,
-    opts: { aspect_ratio?: string; allow_upscale?: boolean; content_hint?: string | null } = {}
+    opts: {
+      aspect_ratio?: string;
+      allow_upscale?: boolean;
+      content_hint?: string | null;
+      requested_width?: number;
+      requested_height?: number;
+    } = {}
   ): Observable<SourceQualityAssessment> {
     const params = new URLSearchParams();
     if (opts.aspect_ratio) params.set('aspect_ratio', opts.aspect_ratio);
     if (opts.allow_upscale != null) params.set('allow_upscale', String(opts.allow_upscale));
     if (opts.content_hint) params.set('content_hint', opts.content_hint);
+    if (opts.requested_width != null) params.set('requested_width', String(opts.requested_width));
+    if (opts.requested_height != null) params.set('requested_height', String(opts.requested_height));
     const query = params.toString();
     return this.http.get<SourceQualityAssessment>(
       `${this.baseUrl}/videos/${videoId}/source-quality${query ? `?${query}` : ''}`
