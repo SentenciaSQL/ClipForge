@@ -123,6 +123,33 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
     return text.slice(0, 80);
   }
 
+  hasRenderedMedia(clip: Clip): boolean {
+    return Boolean(clip.preview_path || clip.output_path);
+  }
+
+  clipPlayerUrl(clip: Clip): string {
+    // Bust cache after each render so the <video> reloads the new file.
+    const stamp = encodeURIComponent(clip.updated_at || clip.preview_path || clip.output_path || clip.id);
+    return `${this.api.clipMediaUrl(clip.id, 'auto')}&t=${stamp}`;
+  }
+
+  sourceSegmentUrl(clip: Clip): string {
+    const start = Math.max(0, Number(this.editStart || clip.start_seconds || 0));
+    const end = Math.max(start + 0.1, Number(this.editEnd || clip.end_seconds || start + 1));
+    // Media fragment seeks to the clip window in browsers that support #t=.
+    return `${this.api.videoMediaUrl(clip.video_id)}#t=${start.toFixed(2)},${end.toFixed(2)}`;
+  }
+
+  activePlayerUrl(clip: Clip): string {
+    return this.hasRenderedMedia(clip) ? this.clipPlayerUrl(clip) : this.sourceSegmentUrl(clip);
+  }
+
+  playerLabel(clip: Clip): string {
+    if (clip.output_path) return 'Playing exported clip';
+    if (clip.preview_path) return 'Playing preview render';
+    return 'Playing source segment (render a preview for final look)';
+  }
+
   ensureManualCrop(): { x: number; y: number; width: number; height: number } {
     const cfg = this.config();
     if (!cfg) {

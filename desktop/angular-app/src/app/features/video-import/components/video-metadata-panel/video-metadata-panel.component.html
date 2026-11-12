@@ -1,18 +1,27 @@
 <section class="meta avc-panel">
   <div class="meta__preview">
-    <img
-      *ngIf="!thumbError"
-      class="meta__thumb"
-      [src]="thumbnailUrl()"
-      [alt]="video.original_filename"
-      (error)="thumbError = true"
-    />
-    <div *ngIf="thumbError" class="meta__thumb meta__thumb--fallback">Preview unavailable</div>
+    <video
+      *ngIf="!mediaError"
+      class="meta__player"
+      controls
+      playsinline
+      preload="metadata"
+      [poster]="thumbnailUrl()"
+      [src]="mediaUrl()"
+      (error)="onMediaError()"
+    >
+      Your browser cannot play this video format.
+    </video>
+    <div *ngIf="mediaError" class="meta__player meta__player--fallback">
+      Playback unavailable for this codec in the browser. Thumbnail:
+      <img class="meta__fallback-thumb" [src]="thumbnailUrl()" [alt]="video.original_filename" />
+    </div>
   </div>
   <div class="meta__body">
     <div class="avc-label">Source video</div>
     <h2 class="meta__title">{{ video.original_filename }}</h2>
     <p class="meta__sub" *ngIf="projectName">Project: {{ projectName }} · Status: {{ video.status }}</p>
+    <p class="meta__hint">Use the player controls to scrub and play the imported video.</p>
     <dl class="meta__grid">
       <div>
         <dt>Duration</dt>

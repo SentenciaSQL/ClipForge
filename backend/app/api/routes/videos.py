@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.database.models import ProcessingJob
+from app.media.http_media import file_response_for_media
 from app.orchestrator.job_manager import job_manager
 from app.schemas.common import MessageResponse
 from app.schemas.jobs import ProcessingJobOut
@@ -82,6 +86,16 @@ def get_video_metadata(video_id: str, db: Session = Depends(get_db)) -> VideoMet
     out = video_to_out(video, include_raw=True)
     assert out.metadata is not None
     return out.metadata
+
+
+@router.get("/videos/{video_id}/media")
+def stream_source_video(video_id: str, db: Session = Depends(get_db)) -> FileResponse:
+    """Stream the original imported video for in-browser preview playback."""
+    video = get_video(db, video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    path = Path(video.stored_path)
+    return file_response_for_media(path, download_name=video.original_filename or path.name)
 
 
 @router.post("/videos/{video_id}/metadata/refresh", response_model=SourceVideoOut)

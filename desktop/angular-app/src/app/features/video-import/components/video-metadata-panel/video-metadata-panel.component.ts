@@ -17,10 +17,14 @@ export class VideoMetadataPanelComponent {
   @Input({ required: true }) video!: SourceVideo;
   @Input() projectName: string | null = null;
 
-  thumbError = false;
+  mediaError = false;
 
   thumbnailUrl(): string {
     return this.api.videoThumbnailUrl(this.video.id);
+  }
+
+  mediaUrl(): string {
+    return this.api.videoMediaUrl(this.video.id);
   }
 
   fileSizeMb(): string {
@@ -32,5 +36,9 @@ export class VideoMetadataPanelComponent {
       return this.video.has_audio;
     }
     return Boolean(this.video.audio_codec);
+  }
+
+  onMediaError(): void {
+    this.mediaError = true;
   }
 }

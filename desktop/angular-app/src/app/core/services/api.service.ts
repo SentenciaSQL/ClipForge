@@ -120,6 +120,14 @@ export class ApiService {
     return `${this.baseUrl}/videos/${videoId}/thumbnail`;
   }
 
+  videoMediaUrl(videoId: string): string {
+    return `${this.baseUrl}/videos/${videoId}/media`;
+  }
+
+  clipMediaUrl(clipId: string, kind: 'auto' | 'preview' | 'output' = 'auto'): string {
+    return `${this.baseUrl}/clips/${clipId}/media?kind=${kind}`;
+  }
+
   listGenerationProfiles(): Observable<GenerationProfile[]> {
     return this.http.get<GenerationProfile[]>(`${this.baseUrl}/generation-profiles`);
   }
