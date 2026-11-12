@@ -5,12 +5,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
 from app.database.models import Clip, ProcessingJob, SubtitlePreset
+from app.media.http_media import file_response_for_media
 from app.orchestrator.job_manager import job_manager
 from app.schemas.common import MessageResponse
 from app.schemas.highlights import ClipOut
@@ -133,6 +135,42 @@ def export_clips_endpoint(payload: ExportClipsRequest, db: Session = Depends(get
     db.refresh(job)
     job_manager.submit_batch_export(job.id)
     return ProcessingJobOut.model_validate(job)
+
+
+@router.get("/clips/{clip_id}/media")
+def stream_clip_media(
+    clip_id: str,
+    kind: str = Query(default="auto", pattern="^(auto|preview|output)$"),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """
+    Stream a rendered clip preview/output for in-browser playback.
+
+    kind=auto prefers preview_path, then output_path.
+    """
+    clip = db.get(Clip, clip_id)
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    candidates: list[Path] = []
+    if kind in {"auto", "preview"} and clip.preview_path:
+        candidates.append(Path(clip.preview_path))
+    if kind in {"auto", "output"} and clip.output_path:
+        candidates.append(Path(clip.output_path))
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path.resolve()) if path.exists() else str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        if path.exists():
+            return file_response_for_media(path)
+
+    raise HTTPException(
+        status_code=404,
+        detail="No playable preview/output yet. Run Preview render or Export MP4 first.",
+    )
 
 
 @router.post("/clips/{clip_id}/open-folder", response_model=MessageResponse)
