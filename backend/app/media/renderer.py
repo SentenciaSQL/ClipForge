@@ -236,9 +236,9 @@ def render_clip(
     ]
 
     # Avoid FPS interpolation unless the user requested a specific rate.
-    if preserve_source_fps or fps is None:
-        args += ["-vsync", "cfr"]
-    else:
+    # Do not pass -vsync: recent FFmpeg builds removed it ("Unrecognized option 'vsync'").
+    # Omitting -r preserves the source timing; -r only when an explicit FPS is requested.
+    if not (preserve_source_fps or fps is None) and fps is not None:
         args += ["-r", str(int(fps))]
 
     args.append(str(output_path))
