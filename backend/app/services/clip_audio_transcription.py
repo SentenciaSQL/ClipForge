@@ -77,7 +77,8 @@ def transcribe_track_for_subtitles(
 
     result = whisper_service.transcribe(
         wav_path,
-        video_id=f"clip-audio:{clip.id}:{track.id}",
+        # Use path-safe ids only — Windows rejects ':' in directory names.
+        video_id=f"clip-audio_{clip.id}_{track.id}",
         model_name=whisper_model,
         language=language or None,
         use_cache=True,

@@ -270,7 +270,10 @@ class WhisperService:
 
     def cache_path(self, video_id: str, key: str) -> Path:
         settings = get_settings()
-        directory = settings.temporary_dir / video_id / "transcription_cache"
+        # Windows rejects ':' and other reserved characters in directory names.
+        safe_id = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in (video_id or "unknown"))
+        safe_id = safe_id.strip("._") or "unknown"
+        directory = settings.temporary_dir / safe_id / "transcription_cache"
         directory.mkdir(parents=True, exist_ok=True)
         return directory / f"{key}.json"
 
