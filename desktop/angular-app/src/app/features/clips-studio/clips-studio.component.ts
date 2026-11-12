@@ -100,7 +100,11 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
     this.api.getClipConfiguration(clip.id).subscribe({
       next: (out) => {
         this.configOut.set(out);
-        this.config.set(structuredClone(out.configuration));
+        const cfg = structuredClone(out.configuration);
+        if (cfg.video.opacity == null || Number.isNaN(Number(cfg.video.opacity))) {
+          cfg.video.opacity = 1;
+        }
+        this.config.set(cfg);
         if (!this.subtitleOverrideText && out.configuration.subtitles.segments?.length) {
           this.subtitleOverrideText = out.configuration.subtitles.segments.map((s) => s.text).join(' ');
         }
@@ -158,6 +162,15 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
     const value = this.config()?.video?.opacity;
     if (value == null || Number.isNaN(Number(value))) return 1;
     return Math.max(0, Math.min(1, Number(value)));
+  }
+
+  setVideoOpacity(raw: number | string): void {
+    const cfg = this.config();
+    if (!cfg) return;
+    const value = Math.max(0, Math.min(1, Number(raw)));
+    cfg.video.opacity = Number.isFinite(value) ? value : 1;
+    this.config.set({ ...cfg });
+    this.markDirty();
   }
 
   ensureManualCrop(): { x: number; y: number; width: number; height: number } {
