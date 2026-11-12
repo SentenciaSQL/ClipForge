@@ -17,6 +17,7 @@ import {
   GenerationConfiguration,
   GenerationConfigurationOut,
   GenerationProfile,
+  SourceQualityAssessment,
   Highlight,
   ProcessingJob,
   Project,
@@ -147,6 +148,27 @@ export class ApiService {
 
   deleteGenerationProfile(id: string): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(`${this.baseUrl}/generation-profiles/${id}`);
+  }
+
+  getSourceQuality(
+    videoId: string,
+    opts: { aspect_ratio?: string; allow_upscale?: boolean; content_hint?: string | null } = {}
+  ): Observable<SourceQualityAssessment> {
+    const params = new URLSearchParams();
+    if (opts.aspect_ratio) params.set('aspect_ratio', opts.aspect_ratio);
+    if (opts.allow_upscale != null) params.set('allow_upscale', String(opts.allow_upscale));
+    if (opts.content_hint) params.set('content_hint', opts.content_hint);
+    const query = params.toString();
+    return this.http.get<SourceQualityAssessment>(
+      `${this.baseUrl}/videos/${videoId}/source-quality${query ? `?${query}` : ''}`
+    );
+  }
+
+  applyAdaptiveGenerationConfiguration(videoId: string): Observable<GenerationConfigurationOut> {
+    return this.http.post<GenerationConfigurationOut>(
+      `${this.baseUrl}/videos/${videoId}/generation-configuration/apply-adaptive`,
+      {}
+    );
   }
 
   transcribeVideo(

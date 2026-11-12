@@ -248,6 +248,9 @@ export interface ClipConfiguration {
     crf: number;
     codec: string;
     encoder: string;
+    auto_quality?: boolean;
+    allow_upscale?: boolean;
+    ai_upscale?: boolean;
   };
   reframe: {
     mode: string;
@@ -256,6 +259,8 @@ export interface ClipConfiguration {
     focal_y: number;
     enable_face_detection: boolean;
     manual_crop?: { x: number; y: number; width: number; height: number } | null;
+    blur_sigma?: number;
+    background_darken?: number;
   };
   audio: {
     codec: string;
@@ -392,6 +397,32 @@ export interface GenerationConfiguration {
   profile_slug?: string | null;
 }
 
+export interface SourceQualityAssessment {
+  width: number;
+  height: number;
+  aspect_ratio: string;
+  fps: number | null;
+  video_codec: string | null;
+  audio_codec: string | null;
+  bitrate: number | null;
+  pixel_format: string | null;
+  color_range: string | null;
+  color_space: string | null;
+  color_transfer: string | null;
+  color_primaries: string | null;
+  rotation: number;
+  display_width: number;
+  display_height: number;
+  tier: string;
+  tier_label: string;
+  summary: string;
+  limitations: string[];
+  recommendations: Record<string, unknown>;
+  crop_impact: Record<string, unknown> | null;
+  warnings: string[];
+  ai_upscale?: Record<string, unknown>;
+}
+
 export interface GenerationConfigurationOut {
   video_id: string;
   configuration: GenerationConfiguration;
@@ -402,6 +433,7 @@ export interface GenerationConfigurationOut {
     [key: string]: unknown;
   };
   summary: string[];
+  source_quality?: SourceQualityAssessment | null;
 }
 
 export interface GenerationProfile {
@@ -458,15 +490,18 @@ export function defaultGenerationConfiguration(): GenerationConfiguration {
       resolution_label: '1080p',
       width: 1080,
       height: 1920,
-      fps: 30,
-      preserve_source_fps: false,
-      quality_preset: 'balanced',
+      fps: null,
+      preserve_source_fps: true,
+      quality_preset: 'high',
       crf: 18,
       codec: 'h264',
       encoder: 'auto',
+      auto_quality: true,
+      allow_upscale: false,
+      ai_upscale: false,
     },
     reframe: {
-      mode: 'smart_crop',
+      mode: 'auto',
       background_color: '#000000',
       focal_x: 0.5,
       focal_y: 0.5,

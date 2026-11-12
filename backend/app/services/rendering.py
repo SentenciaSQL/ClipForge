@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.database.models import Clip, SourceVideo, SubtitlePreset, Transcription
+from app.media.ai_upscale import apply_ai_upscale_if_requested
 from app.media.reframe import plan_reframe_for_clip
 from app.media.renderer import render_clip
 from app.media.subtitles.ass_generator import build_ass_for_clip, write_ass_file
@@ -138,8 +139,14 @@ def render_clip_asset(
     if burn_subtitles is not None:
         cfg.subtitles.enabled = bool(burn_subtitles)
 
-    # Preview uses faster quality unless custom is explicit.
-    quality = "fast" if preview and cfg.video.quality_preset == "balanced" else cfg.video.quality_preset
+    # Preview uses draft/fast encoding; finals keep the configured profile.
+    if preview and cfg.video.quality_preset in {"balanced", "high", "maximum"}:
+        quality = "draft"
+    else:
+        quality = cfg.video.quality_preset
+
+    # Optional AI upscale is never required; log availability only.
+    ai_meta = apply_ai_upscale_if_requested(enabled=bool(getattr(cfg.video, "ai_upscale", False)))
 
     preset_file = _load_preset(db, clip, cfg.subtitles.preset_slug)
     style = style_dict_from_config(cfg)
@@ -185,13 +192,16 @@ def render_clip_asset(
         mode=cfg.reframe.mode,
         background_color=cfg.reframe.background_color,
         focal_x=cfg.reframe.focal_x,
+        focal_y=cfg.reframe.focal_y,
         manual_crop=cfg.reframe.manual_crop.model_dump() if cfg.reframe.manual_crop else None,
         enable_face_detection=enable_faces,
     )
 
-    fps = cfg.video.fps
-    if cfg.video.preserve_source_fps and video.fps:
+    preserve_fps = bool(cfg.video.preserve_source_fps) or cfg.video.fps is None
+    fps = None if preserve_fps else cfg.video.fps
+    if not preserve_fps and cfg.video.fps is None and video.fps:
         fps = int(round(float(video.fps)))
+        preserve_fps = True
 
     if preview:
         output_path = temp_dir / "preview.mp4"
@@ -216,6 +226,7 @@ def render_clip_asset(
         burn_subtitles=burn,
         mix_plan=mix_plan,
         fps=fps,
+        preserve_source_fps=preserve_fps,
         codec=cfg.video.codec,
         encoder=cfg.video.encoder,
         quality_preset=quality,
@@ -228,12 +239,18 @@ def render_clip_asset(
     clip.render_settings = {
         **cfg.model_dump(),
         "encoder": result.encoder,
+        "crf_or_cq": result.crf_or_cq,
         "reframe_notes": reframe.notes,
+        "effective_crop_width": reframe.effective_crop_width,
+        "effective_crop_height": reframe.effective_crop_height,
+        "linear_upscale": reframe.linear_upscale,
+        "ai_upscale": ai_meta,
         "audio_mix": True,
         "loudnorm": mix_settings.enable_loudnorm,
         "limiter": mix_settings.enable_limiter,
         "audio_preset": mix_settings.preset_slug,
         "preview": preview,
+        "preserve_source_fps": preserve_fps,
     }
     if preview:
         clip.preview_path = str(result.output_path)

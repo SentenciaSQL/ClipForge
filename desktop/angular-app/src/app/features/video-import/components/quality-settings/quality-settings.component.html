@@ -1,0 +1,110 @@
+<div class="quality">
+  <section class="quality__source" *ngIf="sourceQuality as sq">
+    <div class="avc-label">Source quality assessment</div>
+    <h3 class="quality__title">{{ sq.tier_label }}</h3>
+    <p class="quality__summary">{{ sq.summary }}</p>
+    <dl class="quality__meta">
+      <div>
+        <dt>Display size</dt>
+        <dd>{{ sq.display_width }}×{{ sq.display_height }}</dd>
+      </div>
+      <div>
+        <dt>Aspect</dt>
+        <dd>{{ sq.aspect_ratio }}</dd>
+      </div>
+      <div>
+        <dt>FPS</dt>
+        <dd>{{ sq.fps ?? '—' }}</dd>
+      </div>
+      <div>
+        <dt>Codec</dt>
+        <dd>{{ sq.video_codec || '—' }}</dd>
+      </div>
+      <div>
+        <dt>Pixel format</dt>
+        <dd>{{ sq.pixel_format || '—' }}</dd>
+      </div>
+      <div>
+        <dt>Rotation</dt>
+        <dd>{{ sq.rotation }}°</dd>
+      </div>
+    </dl>
+    <ul class="quality__limits" *ngIf="sq.limitations?.length">
+      <li *ngFor="let item of sq.limitations">{{ item }}</li>
+    </ul>
+    <div class="quality__rec" *ngIf="sq.recommendations as rec">
+      <div class="avc-label">Recommended configuration</div>
+      <ul>
+        <li>Output canvas: {{ rec['width'] }}×{{ rec['height'] }} ({{ rec['resolution_label'] }})</li>
+        <li>Reframing: {{ rec['reframe_mode'] }}</li>
+        <li>Encoding: {{ rec['codec'] }} · {{ rec['quality_preset'] }}</li>
+        <li *ngFor="let note of recommendationNotes()">{{ note }}</li>
+      </ul>
+    </div>
+    <div class="quality__crop" *ngIf="sq.crop_impact as crop">
+      <strong>Crop impact</strong>
+      <p>{{ crop['message'] }}</p>
+    </div>
+  </section>
+
+  <div class="quality__controls">
+    <label class="toggle">
+      <input type="checkbox" [ngModel]="config.auto_quality" (ngModelChange)="setAuto($event)" />
+      <span>Automatic quality selection (source-aware canvas + reframe)</span>
+    </label>
+    <label class="toggle">
+      <input type="checkbox" [ngModel]="config.allow_upscale" (ngModelChange)="setAllowUpscale($event)" />
+      <span>Allow upscaling beyond source detail (not recommended by default)</span>
+    </label>
+    <label class="toggle">
+      <input type="checkbox" [ngModel]="config.ai_upscale" (ngModelChange)="setAiUpscale($event)" />
+      <span>Optional local AI upscaling (Real-ESRGAN if installed; never required)</span>
+    </label>
+
+    <label>
+      <span class="avc-label">Quality preset</span>
+      <select class="avc-input mt-2" [(ngModel)]="config.quality_preset" (ngModelChange)="emit()">
+        <option *ngFor="let preset of qualityPresets" [value]="preset.key">{{ preset.label }}</option>
+      </select>
+    </label>
+    <label>
+      <span class="avc-label">Encoding method</span>
+      <select class="avc-input mt-2" [(ngModel)]="config.encoder" (ngModelChange)="emit()">
+        <option *ngFor="let enc of encoders" [value]="enc.key">{{ enc.label }}</option>
+      </select>
+    </label>
+    <label>
+      <span class="avc-label">Codec</span>
+      <select class="avc-input mt-2" [(ngModel)]="config.codec" (ngModelChange)="emit()">
+        <option *ngFor="let codec of codecs" [value]="codec.key">{{ codec.label }}</option>
+      </select>
+    </label>
+    <label>
+      <span class="avc-label">CRF / CQ target</span>
+      <input
+        class="avc-input mt-2"
+        type="number"
+        min="12"
+        max="36"
+        [(ngModel)]="config.crf"
+        (ngModelChange)="emit()"
+      />
+    </label>
+  </div>
+
+  <button type="button" class="avc-btn-ghost" (click)="applyAdaptive.emit()">
+    Apply adaptive recommendation now
+  </button>
+
+  <div class="quality__warn" *ngIf="warnings.length">
+    <div *ngFor="let warn of warnings">{{ warn }}</div>
+  </div>
+  <div class="quality__warn" *ngIf="sourceQuality?.warnings?.length">
+    <div *ngFor="let warn of sourceQuality?.warnings || []">{{ warn }}</div>
+  </div>
+
+  <p class="quality__hint">
+    Native resolution = source pixels. Output canvas = export frame size. Effective image resolution =
+    crop / fitted foreground before any scale. Upscaling the canvas does not invent detail.
+  </p>
+</div>

@@ -19,34 +19,44 @@ export class ReframingSettingsComponent {
 
   readonly modes = [
     {
+      key: 'auto',
+      label: 'Auto (quality-aware)',
+      help: 'Chooses smart crop or blurred background based on source resolution and aspect — avoids destructive vertical crops on low-res landscape footage.',
+    },
+    {
       key: 'smart_crop',
       label: 'Smart Crop',
-      help: 'Adapts to content type. Tracks faces when present; otherwise keeps the strongest visual region without assuming a speaker.',
+      help: 'Detects faces/people when relevant and keeps the subject in frame with smoothed focal tracking. Does not assume every video has a speaker.',
     },
     {
       key: 'center_crop',
       label: 'Center Crop',
-      help: 'Crops from the center of the frame to the target aspect ratio.',
+      help: 'Crops around the center. Warns when the crop throws away most of a landscape frame.',
     },
     {
       key: 'blurred_bg',
       label: 'Blurred Background',
-      help: 'Fits the full frame and fills letterboxing with a blurred copy of the video.',
+      help: 'Preserves the full original frame as foreground, fills the canvas with a blurred/darkened cover — no stretch.',
+    },
+    {
+      key: 'fit_original',
+      label: 'Fit Original',
+      help: 'Keeps the entire source frame, maintains aspect ratio, pads with a configurable background.',
     },
     {
       key: 'solid_bg',
       label: 'Solid Background',
-      help: 'Fits the full frame onto a solid color background.',
+      help: 'Fits the full frame onto a solid color background without cropping.',
     },
     {
       key: 'original',
       label: 'Original Frame',
-      help: 'Keeps the original framing as closely as possible for the selected aspect.',
+      help: 'Same as Fit Original — pad into the target canvas without cropping.',
     },
     {
       key: 'manual',
       label: 'Manual Crop',
-      help: 'Uses a normalized crop rectangle you define (editable later per clip).',
+      help: 'Select and reposition the visible region (normalized crop rectangle).',
     },
   ];
 

@@ -10,7 +10,7 @@ CONFIG_SCHEMA_VERSION = 1
 
 AspectKey = Literal["9:16", "1:1", "16:9", "4:3", "4:5", "21:9", "custom"]
 ResolutionLabel = Literal["480p", "720p", "1080p", "1440p", "2160p", "custom"]
-QualityPreset = Literal["fast", "balanced", "high", "custom"]
+QualityPreset = Literal["draft", "fast", "balanced", "high", "maximum", "custom"]
 VideoCodec = Literal["h264", "h265"]
 EncoderPref = Literal["auto", "nvenc", "cpu"]
 ReframeMode = Literal[
@@ -20,6 +20,7 @@ ReframeMode = Literal[
     "blurred_bg",
     "solid_bg",
     "original",
+    "fit_original",
     "manual",
     "podcast",
     "gaming",
@@ -91,12 +92,14 @@ class ManualCrop(BaseModel):
 
 
 class ReframeConfig(BaseModel):
-    mode: ReframeMode = "auto"
+    mode: ReframeMode = "auto"  # quality-aware: may resolve to blurred_bg for landscape→vertical
     background_color: str = "#000000"
     focal_x: float = Field(default=0.5, ge=0.0, le=1.0)
     focal_y: float = Field(default=0.5, ge=0.0, le=1.0)
     enable_face_detection: bool = True
     manual_crop: ManualCrop | None = None
+    blur_sigma: float = Field(default=18.0, ge=1.0, le=64.0)
+    background_darken: float = Field(default=0.08, ge=0.0, le=0.5)
 
 
 class VideoConfig(BaseModel):
@@ -104,12 +107,15 @@ class VideoConfig(BaseModel):
     resolution_label: ResolutionLabel = "1080p"
     width: int = Field(default=1080, ge=16, le=7680)
     height: int = Field(default=1920, ge=16, le=7680)
-    fps: int | None = Field(default=30, ge=1, le=120)
-    preserve_source_fps: bool = False
-    quality_preset: QualityPreset = "balanced"
+    fps: int | None = Field(default=None, ge=1, le=120)
+    preserve_source_fps: bool = True
+    quality_preset: QualityPreset = "high"
     crf: int = Field(default=18, ge=12, le=36)
     codec: VideoCodec = "h264"
     encoder: EncoderPref = "auto"
+    auto_quality: bool = True
+    allow_upscale: bool = False
+    ai_upscale: bool = False
 
 
 class AudioExportConfig(BaseModel):
