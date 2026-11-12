@@ -151,6 +151,15 @@ export class ClipsStudioComponent implements OnInit, OnDestroy {
     return 'Playing source segment (render a preview for final look)';
   }
 
+  previewVideoOpacity(clip: Clip): number {
+    // Live preview dims the <video> only; subtitle overlay stays opaque.
+    // After Preview/Export, opacity is already burned into the file — keep player at 1.
+    if (this.hasRenderedMedia(clip)) return 1;
+    const value = this.config()?.video?.opacity;
+    if (value == null || Number.isNaN(Number(value))) return 1;
+    return Math.max(0, Math.min(1, Number(value)));
+  }
+
   ensureManualCrop(): { x: number; y: number; width: number; height: number } {
     const cfg = this.config();
     if (!cfg) {

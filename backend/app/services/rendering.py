@@ -232,6 +232,7 @@ def render_clip_asset(
         quality_preset=quality,
         crf=cfg.video.crf,
         audio_bitrate_kbps=cfg.audio.bitrate_kbps,
+        video_opacity=float(cfg.video.opacity if cfg.video.opacity is not None else 1.0),
     )
 
     clip.ass_path = str(ass_path) if burn else None

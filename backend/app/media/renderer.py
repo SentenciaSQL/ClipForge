@@ -34,6 +34,62 @@ def _escape_subtitles_path(path: Path) -> str:
     return text
 
 
+def video_opacity_filter(opacity: float | None) -> str | None:
+    """
+    Dim the video frame toward black without touching later ASS burn-in.
+
+    colorchannelmixer scales RGB toward 0 (= black). Applied after reframe and
+    before subtitles= so captions stay fully opaque.
+    """
+    if opacity is None:
+        return None
+    value = max(0.0, min(1.0, float(opacity)))
+    if value >= 0.999:
+        return None
+    # Keep three decimals for stable filter graphs / cache keys.
+    scaled = f"{value:.3f}".rstrip("0").rstrip(".")
+    return f"colorchannelmixer=rr={scaled}:gg={scaled}:bb={scaled}"
+
+
+def _append_video_effects(
+    chain: str,
+    *,
+    opacity: float | None,
+    ass_path: Path | None,
+    burn_subtitles: bool,
+    complex_graph: bool,
+) -> str:
+    """
+    Append opacity (optional) then subtitles to a reframe chain.
+
+    Order is always: reframe → opacity → subtitles, so captions stay opaque.
+    complex_graph=True builds a filter_complex fragment; False builds -vf commas.
+    """
+    opacity_filter = video_opacity_filter(opacity)
+    burn = bool(burn_subtitles and ass_path and ass_path.exists())
+    escaped = _escape_subtitles_path(ass_path) if burn and ass_path else None
+
+    if complex_graph:
+        if opacity_filter and burn and escaped:
+            return (
+                f"{chain}[vbase];"
+                f"[vbase]{opacity_filter}[vdim];"
+                f"[vdim]subtitles='{escaped}'[vout]"
+            )
+        if opacity_filter:
+            return f"{chain}[vbase];[vbase]{opacity_filter}[vout]"
+        if burn and escaped:
+            return f"{chain}[vtmp];[vtmp]subtitles='{escaped}'[vout]"
+        return f"{chain}[vout]"
+
+    filters = [chain]
+    if opacity_filter:
+        filters.append(opacity_filter)
+    if burn and escaped:
+        filters.append(f"subtitles='{escaped}'")
+    return ",".join(filters)
+
+
 def choose_video_encoder(
     *,
     use_nvenc: str | None = None,
@@ -157,6 +213,7 @@ def render_clip(
     quality_preset: str = "balanced",
     crf: int | None = None,
     audio_bitrate_kbps: int = 192,
+    video_opacity: float = 1.0,
 ) -> RenderResult:
     settings = get_settings()
     ffmpeg = get_ffmpeg()
@@ -190,17 +247,21 @@ def render_clip(
 
     if uses_complex_video or apply_mix:
         if uses_complex_video:
-            video_graph = reframe.filter_chain
-            if burn_subtitles and ass_path and ass_path.exists():
-                escaped = _escape_subtitles_path(ass_path)
-                video_graph = f"{video_graph}[vtmp];[vtmp]subtitles='{escaped}'[vout]"
-            else:
-                video_graph = f"{video_graph}[vout]"
+            video_graph = _append_video_effects(
+                reframe.filter_chain,
+                opacity=video_opacity,
+                ass_path=ass_path,
+                burn_subtitles=burn_subtitles,
+                complex_graph=True,
+            )
         else:
-            video_filter = reframe.filter_chain
-            if burn_subtitles and ass_path and ass_path.exists():
-                escaped = _escape_subtitles_path(ass_path)
-                video_filter = f"{video_filter},subtitles='{escaped}'"
+            video_filter = _append_video_effects(
+                reframe.filter_chain,
+                opacity=video_opacity,
+                ass_path=ass_path,
+                burn_subtitles=burn_subtitles,
+                complex_graph=False,
+            )
             video_graph = f"[0:v]{video_filter}[vout]"
 
         if apply_mix:
@@ -216,10 +277,13 @@ def render_clip(
         else:
             args += ["-filter_complex", video_graph, "-map", "[vout]", "-map", "0:a?"]
     else:
-        video_filter = reframe.filter_chain
-        if burn_subtitles and ass_path and ass_path.exists():
-            escaped = _escape_subtitles_path(ass_path)
-            video_filter = f"{video_filter},subtitles='{escaped}'"
+        video_filter = _append_video_effects(
+            reframe.filter_chain,
+            opacity=video_opacity,
+            ass_path=ass_path,
+            burn_subtitles=burn_subtitles,
+            complex_graph=False,
+        )
         args += ["-vf", video_filter]
 
     args += encoder_args
